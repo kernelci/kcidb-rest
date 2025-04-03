@@ -265,7 +265,7 @@ the test: {sub_path}"
             git_commit_tags=krev.get("commit_tags"),
             git_commit_message=krev.get("commit_message"),
             git_repository_branch_tip=krev.get("tip_of_branch"),
-            start_time=datetime.datetime.fromisoformat(json_data["created"]),
+            start_time=datetime.datetime.fromisoformat(json_data["created"]).replace(tzinfo=datetime.timezone.utc),
             patchset_hash="",
             misc={"submitted_by": "kernelci-pipeline"},
             valid=valid,
@@ -281,7 +281,7 @@ the test: {sub_path}"
             id=f"{self.origin}:{json_data['id']}",
             origin=self.origin,
             comment=json_data.get("data").get("kernel_revision").get("describe"),
-            start_time=datetime.datetime.fromisoformat(json_data["created"]),
+            start_time=datetime.datetime.fromisoformat(json_data["created"]).replace(tzinfo=datetime.timezone.utc),
             architecture=self.get_kbuild_architecture(job_name),
             compiler=self.get_kbuild_compiler(job_name),
             command=None,  # No command provided in example
@@ -362,7 +362,7 @@ the test: {sub_path}"
             id=f"{self.origin}:{json_data['id']}",
             origin=self.origin,
             comment=f"{json_data['name']} on {platform} in {runtime}",
-            start_time=datetime.datetime.fromisoformat(json_data["created"]),
+            start_time=datetime.datetime.fromisoformat(json_data["created"]).replace(tzinfo=datetime.timezone.utc),
             environment={
                 "comment": f"Runtime: {runtime}",
                 "compatible": platform_compatible,
@@ -536,23 +536,27 @@ def main():
 
     args = parser.parse_args()
     json_str = None
-    converter = get_treeids()
     if args.config:
         converter.pipeline_cfg_dir = args.config
 
-    while True:
-        json_str = generate_submission(converter, 5)
-        if json_str is None:
-            print("No data to submit")
-            break
-        else:
-            print(f"Generated json, for several trees")
-        # save to submission.json
-        with open("submission.json", "w") as f:
-            f.write(json_str)
-            
-        print(f"Size of json: {len(json_str)}")
-        submit_kcidb_node(json_str)
+    if args.submission:
+        with open(args.submission, "r") as f:
+            json_str = f.read()
+            submit_kcidb_node(json_str)
+    else:
+        converter = get_treeids()
+        while True:
+            json_str = generate_submission(converter, 5)
+            if json_str is None:
+                print("No data to submit")
+                break
+            else:
+                print(f"Generated json, for several trees")
+            # save to submission.json
+            with open("submission.json", "w") as f:
+                f.write(json_str)
+            print(f"Size of json: {len(json_str)}")                
+            submit_kcidb_node(json_str)
 
 if __name__ == "__main__":
     main()
