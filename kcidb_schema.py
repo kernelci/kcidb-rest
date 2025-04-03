@@ -231,7 +231,7 @@ if __name__ == "__main__":
     from sqlalchemy.orm import sessionmaker
     
     # Create engine
-    engine = create_engine('postgresql://kcidb:kcidb@localhost:5433/kcidb')
+    engine = create_engine('postgresql://kcidb:kcidb@localhost:5432/kcidb')
     # Unix socket /var/run/postgresql/.s.PGSQL.5433
     #engine = create_engine('postgresql://postgres:postgres@/kcidb')
     

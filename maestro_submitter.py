@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import json
-from datetime import datetime
+import datetime
 from kcidb_model import Build, Checkout, Test, Status, Kcidb, Version, Resource
 from kernelci.config import merge_trees
 import kernelci.api
@@ -10,7 +10,9 @@ import os
 import logging
 import sys
 import requests
+import argparse
 from pydantic import AnyUrl
+
 
 MISSED_TEST_CODES = (
     "Bug",
@@ -48,6 +50,7 @@ class MaestroConverter:
         self.log = logging.getLogger(__name__)
         self.origin = "maestro"
         self._node_cache = {}
+        self.treeids = []
         self.api = None
 
     def _get_output_files(self, artifacts: dict, exclude_properties=None):
@@ -162,6 +165,16 @@ the test: {sub_path}"
             if not node["parent"]:
                 return None
         return node
+    
+    def _get_parent_kbuild(self, node):
+        # walk up by 'parent' field
+        # until we reach node with kind 'kbuild'
+        # return job_id
+        while node["kind"] != "kbuild":
+            node = self._cached_node_get(node["parent"])
+            if not node["parent"]:
+                return None
+        return node
 
     def load_pipeline_cfg(self):
         # iterate over all yaml files in the pipeline_cfg_dir
@@ -252,7 +265,7 @@ the test: {sub_path}"
             git_commit_tags=krev.get("commit_tags"),
             git_commit_message=krev.get("commit_message"),
             git_repository_branch_tip=krev.get("tip_of_branch"),
-            start_time=datetime.fromisoformat(json_data["created"]),
+            start_time=datetime.datetime.fromisoformat(json_data["created"]),
             patchset_hash="",
             misc={"submitted_by": "kernelci-pipeline"},
             valid=valid,
@@ -268,7 +281,7 @@ the test: {sub_path}"
             id=f"{self.origin}:{json_data['id']}",
             origin=self.origin,
             comment=json_data.get("data").get("kernel_revision").get("describe"),
-            start_time=datetime.fromisoformat(json_data["created"]),
+            start_time=datetime.datetime.fromisoformat(json_data["created"]),
             architecture=self.get_kbuild_architecture(job_name),
             compiler=self.get_kbuild_compiler(job_name),
             command=None,  # No command provided in example
@@ -316,10 +329,22 @@ the test: {sub_path}"
     def process_test(self, json_data):
         if self._is_checkout_child(json_data):
             return None
+        path = json_data['path']
+        if 'setup' in path and 'os-release' not in path:
+            # do not send setup tests except `os-release`
+            print(f"Skipping setup test {json_data['id']} as its setup related")
+            return None
         parent_job = self._get_parent_job(json_data)
         if not parent_job:
             # TODO: This is maybe kselftest build tests and etc
             return None
+        name = json_data["name"]
+        # TODO: ignore kunits now as they dont have parent build
+        # their name start with kunit
+        if name.startswith("kunit"):
+            self.log.debug(f"Skipping kunit test {json_data['id']}")
+            return None
+
         platform = json_data["data"].get("platform")
         platform_compatible = self._platform_compatible(platform)
         if not platform_compatible:
@@ -327,12 +352,17 @@ the test: {sub_path}"
 
         runtime = json_data["data"].get("runtime")
         is_checkout_child = self._is_checkout_child(json_data)
+        kbuild_parent = self._get_parent_kbuild(json_data)
+        if not kbuild_parent:
+            self.log.debug(f"Test {json_data['id']} missing kbuild parent")
+            return None
+
         test_data = Test(
-            build_id=f"{self.origin}:{json_data['parent']}",
+            build_id=f"{self.origin}:{kbuild_parent['id']}",
             id=f"{self.origin}:{json_data['id']}",
             origin=self.origin,
             comment=f"{json_data['name']} on {platform} in {runtime}",
-            start_time=datetime.fromisoformat(json_data["created"]),
+            start_time=datetime.datetime.fromisoformat(json_data["created"]),
             environment={
                 "comment": f"Runtime: {runtime}",
                 "compatible": platform_compatible,
@@ -371,7 +401,11 @@ the test: {sub_path}"
                 url_obj = AnyUrl(artifacts.get('lava_log'))
                 test_data.log_url = url_obj
             else:
-                url_obj = AnyUrl(artifacts.get('test_log'))
+                artifact_url = artifacts.get('test_log')
+                if not artifact_url:
+                    self.log.error(f"Test {json_data['id']} missing log")
+                    return None
+                url_obj = AnyUrl(artifact_url)
                 test_data.log_url = url_obj
 
             #log_url = test_data.log_url
@@ -395,34 +429,12 @@ the test: {sub_path}"
 
 # print("Converted JSON saved as 'kcidb_build_output.json'")
 
-def is_submission_cached(filename):
-    return os.path.exists(filename)
-
 def submit_kcidb_node(json_str):
     hdr = {"Authorization": "your_api_key_here", "Content-Type": "application/json"}
-    requests.post("http://localhost:8000/submit", headers=hdr, data=json_str)
+    encoded_json = json_str.encode('utf-8')
+    requests.post("http://localhost:7000/submit", headers=hdr, data=encoded_json)
 
-def generate_submission(trees_num):
-    converter = MaestroConverter()
-    api_data = """
-timeout: 60
-url: https://kernelci-api.westus3.cloudapp.azure.com
-version: latest
-"""
-    api_config = kernelci.config.api.API.load_from_yaml(
-            yaml.safe_load(api_data), name='api'
-        )
-
-    converter.api = kernelci.api.get_api(api_config)
-    nodes = converter.api.node.findfast({
-        'state': 'done',
-        'kind': 'checkout',
-    })
-    treeids = []
-    for node in nodes:
-        if 'treeid' in node:
-            treeids.append(node['treeid'])
-
+def generate_submission(converter, trees_num=50):
     submission = Kcidb(
         version=Version(
             major=5,
@@ -436,10 +448,11 @@ version: latest
     )
 
     cnt = 0
-    while treeids:
-        treeid = treeids.pop(0)
+    while converter.treeids:
+        # get treeid from the list
+        treeid = converter.treeids.pop(0)
         if not treeid:
-            continue
+            break
         filter = {
             'treeid': treeid,
             'state': 'done',
@@ -456,6 +469,10 @@ version: latest
 
         if cnt > trees_num:
             break
+
+    if cnt == 0:
+        logging.error("No nodes found")
+        return None
 
     # validate integrity, all builds should have valid reference to checkout
     for build in submission.builds:
@@ -476,22 +493,66 @@ version: latest
     json_str = submission.model_dump_json(exclude_none=True, by_alias=True, indent=2)
     return json_str
 
+# API DATA IS:
+#    timeout: 60
+#    url: https://kernelci-api.westus3.cloudapp.azure.com
+#    version: latest
+
+
+def get_treeids():
+    converter = MaestroConverter()
+    api_data = """
+    timeout: 60
+    url: https://kernelci-api.westus3.cloudapp.azure.com
+    version: latest
+    """
+    api_config = kernelci.config.api.API.load_from_yaml(
+            yaml.safe_load(api_data), name='api'
+        )
+    converter.api = kernelci.api.get_api(api_config)
+    # get the last 24 hours
+    isodate_now = datetime.datetime.now().isoformat()
+    isodate_creation = (
+        datetime.datetime.now() - datetime.timedelta(days=7)
+    ).isoformat()
+    nodes = converter.api.node.findfast({
+        'state': 'done',
+        'kind': 'checkout',
+        'created__gt': isodate_creation,
+    })
+    for node in nodes:
+        if 'treeid' in node:
+            converter.treeids.append(node['treeid'])
+    return converter
+
 def main():
-    #api_data = {
-    #    'url': 'https://kernelci-api.westus3.cloudapp.azure.com',
-    #    'version': 'latest'
-    #}
-    if not is_submission_cached("submission.json"):
-        json_str = generate_submission(50)
+    parser = argparse.ArgumentParser(description="Submit Maestro data to KCIDB")
+    parser.add_argument(
+        "-c", "--config", type=str, help="Path to Maestro-pipeline config directory"
+    )
+    parser.add_argument(
+        "-s", "--submission", type=str, help="Path to Maestro submission file"
+    )
+
+    args = parser.parse_args()
+    json_str = None
+    converter = get_treeids()
+    if args.config:
+        converter.pipeline_cfg_dir = args.config
+
+    while True:
+        json_str = generate_submission(converter, 5)
+        if json_str is None:
+            print("No data to submit")
+            break
+        else:
+            print(f"Generated json, for several trees")
+        # save to submission.json
         with open("submission.json", "w") as f:
             f.write(json_str)
-    else:
-        with open("submission.json", "r") as f:
-            json_str = f.read()
-    # Pydantic model to json 2.0
             
-    print(f"Size of json: {len(json_str)}")
-    submit_kcidb_node(json_str)
+        print(f"Size of json: {len(json_str)}")
+        submit_kcidb_node(json_str)
 
 if __name__ == "__main__":
     main()

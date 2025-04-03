@@ -21,7 +21,7 @@ import logging
 app = FastAPI()
 
 # postgres connection
-engine = create_engine('postgresql://kcidb:kcidb@localhost:5433/kcidb')
+engine = create_engine('postgresql://kcidb:kcidb@localhost:5432/kcidb')
 Session = sessionmaker(bind=engine)
 
 def map_pydantic_to_db_tests(test):
@@ -106,4 +106,4 @@ async def submit(request: Request):
     return {"message": "Kcidb node submitted"}
     
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7000)
