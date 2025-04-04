@@ -14,13 +14,12 @@ use axum::routing::post;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::extract::State;
-// headermap
 use axum::http::header::HeaderMap;
 use clap::Parser;
 use std::path::Path;
 use std::sync::Arc;
-// jwt
 use serde::{Serialize, Deserialize};
+use rand::Rng;
 use jsonwebtoken::{decode, Validation, DecodingKey};
 use tokio::net::TcpListener;
 use axum::Router;
@@ -106,6 +105,13 @@ async fn receive_submission(
     match submission_json {
         Ok(submission) => {
             println!("Received submission: {:?}", submission);
+            let submission_id = random_string(32);
+            let submission_path = format!("{}/{}", state.path, submission_id);
+            std::fs::create_dir_all(&submission_path).unwrap();
+            let submission_file = format!("{}/submission.json.temp", submission_path);
+            std::fs::write(&submission_file, &body).unwrap();
+            // on completion, rename to submission.json
+            std::fs::rename(&submission_file, &format!("{}/submission.json", submission_path)).unwrap();
             (StatusCode::OK, "Submission received")
         }
         Err(e) => {
@@ -140,3 +146,15 @@ fn generate_jwt(origin: &str, gendate: &str, secret: &str) -> Result<String, jso
     Ok(token)
 }
 */
+
+
+// TODO: Fix this
+fn random_string(length: usize) -> String {
+    let mut rng = rand::rng();
+    // rng.sample(rand::distr::Alphanumeric) as char
+    let mut s = String::new();
+    for _ in 0..length {
+        s.push(rng.sample(rand::distr::Alphanumeric) as char);
+    }
+    s
+}
