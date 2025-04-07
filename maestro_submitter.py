@@ -432,7 +432,11 @@ the test: {sub_path}"
 def submit_kcidb_node(json_str):
     hdr = {"Authorization": "your_api_key_here", "Content-Type": "application/json"}
     encoded_json = json_str.encode('utf-8')
-    requests.post("http://localhost:7000/submit", headers=hdr, data=encoded_json)
+    r = requests.post("http://localhost:7000/submit", headers=hdr, data=encoded_json)
+    if r.status_code != 200:
+        print(f"Error: {r.status_code} {r.text}")
+        return False
+    return True
 
 def generate_submission(converter, trees_num=50):
     submission = Kcidb(
@@ -542,7 +546,9 @@ def main():
     if args.submission:
         with open(args.submission, "r") as f:
             json_str = f.read()
-            submit_kcidb_node(json_str)
+            if not submit_kcidb_node(json_str):
+                print("Failed to submit")
+                return
     else:
         converter = get_treeids()
         while True:
@@ -556,7 +562,9 @@ def main():
             with open("submission.json", "w") as f:
                 f.write(json_str)
             print(f"Size of json: {len(json_str)}")                
-            submit_kcidb_node(json_str)
+            if not submit_kcidb_node(json_str):
+                print("Failed to submit")
+                return
 
 if __name__ == "__main__":
     main()

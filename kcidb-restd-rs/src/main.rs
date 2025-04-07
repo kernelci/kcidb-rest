@@ -23,6 +23,8 @@ use rand::Rng;
 use jsonwebtoken::{decode, Validation, DecodingKey};
 use tokio::net::TcpListener;
 use axum::Router;
+use tower_http::limit::RequestBodyLimitLayer;
+
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -31,18 +33,18 @@ struct Args {
     #[clap(short, long, default_value = "3000")]
     port: u16,
     /// The host to listen on
-    #[clap(short, long, default_value = "0.0.0.0")]
+    #[clap(short = 'b', long, default_value = "0.0.0.0")]
     host: String,
     /// The path to the directory to store the received files
-    #[clap(short, long, default_value = "/var/www/kcidb-rest/submissions")]
-    path: String,
+    #[clap(short = 'd', long, default_value = "/var/www/kcidb-rest/submissions")]
+    directory: String,
     /// JWT secret
     #[clap(short, long, default_value = "secret")]
     jwt_secret: String,
 }
 
 struct AppState {    
-    path: String,
+    directory: String,
     jwt_secret: String,
 }
 
@@ -53,27 +55,52 @@ fn verify_submission_path(path: &str) -> bool {
 
 #[tokio::main]
 async fn main() {
+    let limit_layer = RequestBodyLimitLayer::new(512 * 1024 * 1024);
     let args = Args::parse();
     let app_state = Arc::new(AppState {
-        path: args.path,
+        directory: args.directory,
         jwt_secret: args.jwt_secret,
     });
-    if !verify_submission_path(&app_state.path) {
-        eprintln!("Error: submissions path {} does not exist or is not a directory", app_state.path);
+    if !verify_submission_path(&app_state.directory) {
+        eprintln!("Error: submissions path {} does not exist or is not a directory", app_state.directory);
         std::process::exit(1);
     }
     // if default value - warn
     if app_state.jwt_secret == "secret" {
         eprintln!("Warning: JWT secret is default value");
     }
-    println!("Listening on {}:{}, submissions path: {}", args.host, args.port, app_state.path);
+    // if secret is empty, warn
+    if app_state.jwt_secret.is_empty() {
+        eprintln!("Warning: JWT secret is empty, disabling authentication");
+    }
+    println!("Listening on {}:{}, submissions path: {}", args.host, args.port, app_state.directory);
     // change body limit to 512MB
     let app = Router::new()
         .route("/submit", post(receive_submission))
         .with_state(app_state)
-        .with_state(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
+        .layer(limit_layer)
+        .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
     let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
     axum::serve(tcp_listener, app).await.unwrap();
+}
+
+fn verify_auth(headers: HeaderMap, state: Arc<AppState>) -> Result<(), String> {
+    // if secret is empty, return Ok
+    if state.jwt_secret.is_empty() {
+        return Ok(());
+    }
+    let jwt_r = headers.get("Authorization");
+    let jwt = match jwt_r {
+        Some(jwt) => jwt,
+        None => return Err("JWT is required".to_string()),
+    };
+    let jwt_str = jwt.to_str().unwrap();
+    let jwt_str = jwt_str.split(" ").nth(1).unwrap();
+    let jwt = verify_jwt(jwt_str, &state.jwt_secret);
+    match jwt {
+        Ok(jwt) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 // Answer STATUS 200 if the submission is valid
@@ -82,48 +109,30 @@ async fn receive_submission(
     State(state): State<Arc<AppState>>,
     body: String,
 ) -> impl IntoResponse {
-
-    let jwt_r = headers.get("Authorization");
-    let jwt = match jwt_r {
-        Some(jwt) => jwt,
-        None => return (StatusCode::BAD_REQUEST, "JWT is required"),
-    };
-    let jwt_str = jwt.to_str().unwrap();
-    let jwt_str = jwt_str.split(" ").nth(1).unwrap();
-    let jwt = verify_jwt(jwt_str, &state.jwt_secret);
-    match jwt {
-        Ok(jwt) => {
-            println!("JWT is valid: {:?}", jwt);
-        }
-        Err(e) => {
-            println!("Error: {}", e);
-            return (StatusCode::BAD_REQUEST, "Invalid JWT");
-        }
+    let auth_result = verify_auth(headers, state.clone());
+    match auth_result {
+        Ok(()) => (),
+        Err(e) => return (StatusCode::UNAUTHORIZED, e.to_string()),
     }
 
-    let submission_json = serde_json::from_str::<Submission>(&body);
+    let submission_json = serde_json::from_str::<serde_json::Value>(&body);
     match submission_json {
         Ok(submission) => {
-            println!("Received submission: {:?}", submission);
+            let size = body.len();
+            println!("Received submission size: {}", size);
             let submission_id = random_string(32);
-            let submission_path = format!("{}/{}", state.path, submission_id);
-            std::fs::create_dir_all(&submission_path).unwrap();
-            let submission_file = format!("{}/submission.json.temp", submission_path);
+            let submission_file = format!("{}/submission-{}.json.temp", state.directory, submission_id);
             std::fs::write(&submission_file, &body).unwrap();
             // on completion, rename to submission.json
-            std::fs::rename(&submission_file, &format!("{}/submission.json", submission_path)).unwrap();
-            (StatusCode::OK, "Submission received")
+            std::fs::rename(&submission_file, &format!("{}/submission-{}.json", state.directory, submission_id)).unwrap();
+            println!("Submission {} received", submission_id);
+            (StatusCode::OK, "Submission received".to_string())
         }
         Err(e) => {
             println!("Error: {}", e);
-            (StatusCode::BAD_REQUEST, "Invalid submission format")
+            (StatusCode::BAD_REQUEST, "Invalid submission format".to_string())
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Submission {
-    submission: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
