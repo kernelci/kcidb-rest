@@ -6,14 +6,22 @@ from kcidb import io, db, mq, orm, oo, monitor, tests, unittest, misc # noqa
 import json
 import time
 
+# default database
 DATABASE = "postgresql:dbname=kcidb user=kcidb password=kcidb host=localhost port=5432"
 
 def get_db_credentials():
-    pgpass = "kcidb"
+    global DATABASE
+    pgpass = os.environ.get("PGPASS")
+    if not pgpass:
+        raise Exception("PGPASS environment variable not set")
     (pgpass_fd, pgpass_filename) = tempfile.mkstemp(suffix=".pgpass")
     with os.fdopen(pgpass_fd, mode="w", encoding="utf-8") as pgpass_file:
         pgpass_file.write(pgpass)
     os.environ["PGPASSFILE"] = pgpass_filename
+    db_uri = os.environ.get("PG_URI")
+    if db_uri:
+        DATABASE = db_uri
+
 
 def get_db_client(database):
     get_db_credentials()

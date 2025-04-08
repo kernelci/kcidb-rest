@@ -1,0 +1,23 @@
+# Dockerfile for kcidb-rest-rs
+
+FROM rust:bookworm
+
+# update to latest rust
+RUN rustup update
+
+WORKDIR /app
+
+RUN mkdir -p spool
+
+COPY kcidb-restd-rs/ .
+
+RUN cargo build --release
+
+# secondary image slim bookworm
+FROM debian:bookworm-slim
+
+COPY --from=0 /app/target/release/kcidb-restd-rs /usr/local/bin/kcidb-restd-rs
+
+CMD ["kcidb-restd-rs"]
+
+

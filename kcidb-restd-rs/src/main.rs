@@ -36,7 +36,7 @@ struct Args {
     #[clap(short = 'b', long, default_value = "0.0.0.0")]
     host: String,
     /// The path to the directory to store the received files
-    #[clap(short = 'd', long, default_value = "/var/www/kcidb-rest/submissions")]
+    #[clap(short = 'd', long, default_value = "/app/spool")]
     directory: String,
     /// JWT secret
     #[clap(short, long, default_value = "secret")]
