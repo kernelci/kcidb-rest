@@ -61,6 +61,10 @@ def get_db_connection():
             print("No database connection string found. Please set the PG_DSN environment variable or create a .pg_dsn file.")
             sys.exit(1)
     
+    # if pg_dsn contains prefix postgresql: (kcidb specific) - remove it
+    if pg_dsn.startswith("postgresql:"):
+        pg_dsn = pg_dsn[len("postgresql:"):]
+
     try:
         conn = psycopg2.connect(
             dsn=pg_dsn,
