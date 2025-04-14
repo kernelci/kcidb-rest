@@ -11,14 +11,14 @@ DATABASE = "postgresql:dbname=kcidb user=kcidb password=kcidb host=localhost por
 
 def get_db_credentials():
     global DATABASE
-    pgpass = os.environ.get("PGPASS")
+    pgpass = os.environ.get("PG_PASS")
     if not pgpass:
         raise Exception("PGPASS environment variable not set")
     (pgpass_fd, pgpass_filename) = tempfile.mkstemp(suffix=".pgpass")
     with os.fdopen(pgpass_fd, mode="w", encoding="utf-8") as pgpass_file:
         pgpass_file.write(pgpass)
     os.environ["PGPASSFILE"] = pgpass_filename
-    db_uri = os.environ.get("PG_URI")
+    db_uri = os.environ.get("PG_DSN")
     if db_uri:
         DATABASE = db_uri
 

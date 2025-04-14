@@ -12,6 +12,8 @@ services:
     volumes:
       - ./spool:/app/spool
     restart: unless-stopped
+# To disable JWT auth
+#    command: ["/usr/local/bin/kcidb-restd-rs","-j",""]
   ingester:
     build:
       context: .
@@ -20,7 +22,7 @@ services:
       - .env
     volumes:
       - ./spool:/app/spool
-    command: ["python", "/app/ingester_poc.py", "--spool-dir", "/app/spool"]
+    command: ["python", "/app/ingester.py", "--spool-dir", "/app/spool"]
     restart: unless-stopped
   logspec-worker:
     build:
