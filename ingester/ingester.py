@@ -56,6 +56,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
     args = parser.parse_args()
+    get_db_credentials()
     while True:
         ingest_submissions(args.spool_dir)
 
