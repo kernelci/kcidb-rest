@@ -17,7 +17,7 @@ import gzip
 import hashlib
 import requests
 from logspec_api import generate_issues_and_incidents
-
+import kcidb
 
 def set_test_processed(cursor, test_id):
     """
@@ -137,6 +137,21 @@ def logspec_process_test(test):
     return generate_issues_and_incidents(log_id, log_file, test_type)
 
 
+def generate_submission(nodes):
+    submission = Kcidb(
+        version=Version(
+            major=5,
+            minor=1,
+        ),
+        checkouts=[],
+        builds=[],
+        tests=[],
+        issues=[],
+        incidents=[],
+    )
+
+
+
 def main():
     """
     Main function to process the logspec
@@ -171,6 +186,8 @@ def main():
         print(f"Processing test {test['id']}")
         # Call logspec
         result = logspec_process_test(test)
+        #if result:
+        #   set_test_processed(cursor, test['id'])
         print(f"Logspec result: {result}")
 
 
