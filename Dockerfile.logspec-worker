@@ -1,0 +1,17 @@
+FROM python:3.13-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y git
+
+RUN git clone https://github.com/kernelci/kcidb.git && \
+    cd kcidb && \
+    pip install -e .
+
+COPY logspec-worker/logspec_api.py /app/logspec_api.py
+COPY logspec-worker/logspec_worker.py /app/logspec_worker.py
+
+WORKDIR /app
+
+CMD ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool"]
+

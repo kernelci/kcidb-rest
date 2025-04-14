@@ -22,3 +22,13 @@ services:
       - ./spool:/app/spool
     command: ["python", "/app/ingester_poc.py", "--spool-dir", "/app/spool"]
     restart: unless-stopped
+  logspec-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.logspec-worker
+    env_file:
+      - .env
+    volumes:
+      - ./spool:/app/spool
+    command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool"]
+    restart: unless-stopped
