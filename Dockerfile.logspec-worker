@@ -8,6 +8,10 @@ RUN git clone https://github.com/kernelci/kcidb.git && \
     cd kcidb && \
     pip install -e .
 
+RUN git clone https://github.com/kernelci/logspec.git && \
+    cd logspec && \
+    pip install -e .
+
 COPY logspec-worker/logspec_api.py /app/logspec_api.py
 COPY logspec-worker/logspec_worker.py /app/logspec_worker.py
 
