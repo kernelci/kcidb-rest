@@ -143,13 +143,13 @@ def logspec_process_test(test):
     return generate_issues_and_incidents(log_id, log_file, test_type)
 
 
-def remove_none_fields(self, data):
+def remove_none_fields(data):
     """Remove all keys with `None` values as KCIDB doesn't allow it"""
     if isinstance(data, dict):
-        return {key: self._remove_none_fields(val)
+        return {key: remove_none_fields(val)
                 for key, val in data.items() if val is not None}
     if isinstance(data, list):
-        return [self._remove_none_fields(item) for item in data]
+        return [remove_none_fields(item) for item in data]
     return data
 
 
@@ -231,9 +231,6 @@ def main():
             print(f"No issues or incidents found in test {test['id']}")
         # mark the test as processed (TODO: must be in database)
         set_test_processed(cursor, test['id'])
-
-
-
 
     conn.close()
     cursor.close()
