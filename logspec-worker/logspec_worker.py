@@ -226,7 +226,7 @@ def main():
         if res_nodes['issue_node'] or res_nodes['incident_node']:
             # submit to kcidb incident and issue
             print(f"Submitting to kcidb")
-            submit_to_kcidb(res_nodes['issue_node'], res_nodes['incident_node'])
+            submit_to_kcidb(res_nodes['issue_node'], res_nodes['incident_node'], spool_dir)
         else:
             print(f"No issues or incidents found in test {test['id']}")
         # mark the test as processed (TODO: must be in database)
