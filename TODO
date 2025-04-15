@@ -1,0 +1,6 @@
+Short term goals:
+1)Make sure all data is valid in kcidb (some are not)
+2)README.md
+3)Add with spool, archive directory where processed files will live for some time
+4)Better deploy
+5).db file must not be deleted with container
