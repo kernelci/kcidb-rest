@@ -18,6 +18,8 @@ import hashlib
 import requests
 from logspec_api import generate_issues_and_incidents
 import kcidb
+import argparse
+
 
 def set_test_processed(cursor, test_id):
     """
@@ -141,25 +143,56 @@ def logspec_process_test(test):
     return generate_issues_and_incidents(log_id, log_file, test_type)
 
 
-def generate_submission(nodes):
-    submission = Kcidb(
-        version=Version(
-            major=5,
-            minor=1,
-        ),
-        checkouts=[],
-        builds=[],
-        tests=[],
-        issues=[],
-        incidents=[],
-    )
+def remove_none_fields(self, data):
+    """Remove all keys with `None` values as KCIDB doesn't allow it"""
+    if isinstance(data, dict):
+        return {key: self._remove_none_fields(val)
+                for key, val in data.items() if val is not None}
+    if isinstance(data, list):
+        return [self._remove_none_fields(item) for item in data]
+    return data
 
+
+def submit_to_kcidb(issues, incidents, spool_dir):
+    """
+    Submit issues and incidents to kcidb
+    """
+    revision = {
+        'checkouts': [],
+        'builds': [],
+        'tests': [],
+        'issues': issues,
+        'incidents': incidents,
+        'version': {
+            'major': 4,
+            'minor': 5
+        }
+    }
+    # remove None fields
+    revision = remove_none_fields(revision)
+    # generate raw json
+    raw_json = json.dumps(revision)
+    # random part of filename
+    random_part = os.urandom(8).hex()
+    # generate filename
+    filename = f"logspec_{random_part}.json"
+    # drop it as json in spool_dir
+    with open(os.path.join(spool_dir, filename), "w") as f:
+        f.write(raw_json)
 
 
 def main():
     """
     Main function to process the logspec
     """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--spool-dir", type=str, required=True)
+    args = parser.parse_args()
+    spool_dir = args.spool_dir
+    # check if spool_dir exists
+    if not os.path.exists(spool_dir):
+        print(f"Spool directory {spool_dir} does not exist")
+        sys.exit(1)
     # verify if cache directory exists
     if not os.path.exists("cache"):
         os.makedirs("cache")
@@ -189,14 +222,15 @@ def main():
         # Process the test
         print(f"Processing test {test['id']}")
         # Call logspec
-        result = logspec_process_test(test)
-        #if result:
-        #   set_test_processed(cursor, test['id'])
-        print(f"Logspec result: {result}")
+        res_nodes, new_status = logspec_process_test(test)
+        if res_nodes['issue_node'] or res_nodes['incident_node']:
+            # submit to kcidb incident and issue
+            submit_to_kcidb(res_nodes['issue_node'], res_nodes['incident_node'])
+        # mark the test as processed (TODO: must be in database)
+        set_test_processed(cursor, test['id'])
 
 
 
-        print("\n")
 
     conn.close()
     cursor.close()
