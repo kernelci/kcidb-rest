@@ -46,7 +46,7 @@ def ingest_submissions(spool_dir):
                 ing_speed = fsize / (time.time() - start_time) / 1024
                 print(f"Ingested {filename} in {ing_speed} KB/s")
                 # delete the file
-                # os.remove(os.path.join(spool_dir, filename))
+                os.remove(os.path.join(spool_dir, filename))
         except Exception as e:
             print(f"Error: {e}")
             print(f"File: {filename}")
@@ -59,6 +59,7 @@ def main():
     get_db_credentials()
     while True:
         ingest_submissions(args.spool_dir)
+        time.sleep(1)
 
 if __name__ == "__main__":
     main()
