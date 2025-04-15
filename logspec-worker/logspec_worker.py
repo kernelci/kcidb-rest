@@ -140,7 +140,7 @@ def logspec_process_test(test):
     log_file = os.path.join("cache", log_id)
     parsed_node_id = test['id']
     test_type = 'boot'
-    return generate_issues_and_incidents(log_id, log_file, test_type)
+    return generate_issues_and_incidents(test['id'], log_file, test_type)
 
 
 def remove_none_fields(data):
