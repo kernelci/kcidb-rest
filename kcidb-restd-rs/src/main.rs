@@ -77,6 +77,7 @@ async fn main() {
     let tls_chain : String;
     // if we have environment variable JWT_SECRET, use it
     if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
+        println!("Using JWT secret from environment variable");
         app_state.jwt_secret = jwt_secret;
     }
     // do we have CERTBOT_DOMAIN? Then certificates are in /certs/live/${CERTBOT_DOMAIN}/

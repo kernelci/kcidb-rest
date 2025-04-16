@@ -34,22 +34,23 @@ services:
       - ./spool:/app/spool
     command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool"]
     restart: unless-stopped
-  certbot:
-    image: certbot/certbot
-    ports:
-      - "80:80"
-    volumes:
-      - ./certs:/etc/letsencrypt
-      - ./certs-data:/var/lib/letsencrypt
-    environment:
-      - CERTBOT_DOMAIN=${CERTBOT_DOMAIN}
-      - CERTBOT_EMAIL=${CERTBOT_EMAIL}
-    env_file:
-      - .env
-    # initially run certbot to get the certificate
-    command: certonly --cert-name ${CERTBOT_DOMAIN} --webroot --webroot-path=/var/lib/letsencrypt -d ${CERTBOT_DOMAIN} --email ${CERTBOT_EMAIL} --agree-tos --non-interactive --no-eff-email
-    # Uncomment the following lines to run certbot in a loop, and comment the above line
-    #entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-    #restart: unless-stopped
+# TODO: This is complicated to set up, due dashboard on same server
+#  certbot:
+#    image: certbot/certbot
+#    ports:
+#      - "80:80"
+#    volumes:
+#      - ./certs:/etc/letsencrypt
+#      - ./certs-data:/var/lib/letsencrypt
+#    environment:
+#      - CERTBOT_DOMAIN=${CERTBOT_DOMAIN}
+#      - CERTBOT_EMAIL=${CERTBOT_EMAIL}
+#    env_file:
+#      - .env
+#    # initially run certbot to get the certificate
+#    command: certonly --cert-name ${CERTBOT_DOMAIN} --standalone -d ${CERTBOT_DOMAIN} --email ${CERTBOT_EMAIL} --agree-tos --non-interactive --no-eff-email
+#    # Uncomment the following lines to run certbot in a loop, and comment the above line
+#    #entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+#    #restart: unless-stopped
     
     
