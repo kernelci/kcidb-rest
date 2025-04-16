@@ -24,13 +24,13 @@ use jsonwebtoken::{decode, Validation, DecodingKey};
 use tokio::net::TcpListener;
 use axum::Router;
 use tower_http::limit::RequestBodyLimitLayer;
-
+use axum_server::tls_rustls::RustlsConfig;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// The port to listen on
-    #[clap(short, long, default_value = "3000")]
+    #[clap(short, long, default_value = "443")]
     port: u16,
     /// The host to listen on
     #[clap(short = 'b', long, default_value = "0.0.0.0")]
@@ -53,6 +53,18 @@ fn verify_submission_path(path: &str) -> bool {
     path.exists() && path.is_dir()
 }
 
+fn wait_for_file(path: &str) -> bool {
+    let path = Path::new(path);
+    // wait for the file to be created
+    for _ in 0..300 {
+        if path.exists() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
+    false
+}
+
 #[tokio::main]
 async fn main() {
     let limit_layer = RequestBodyLimitLayer::new(512 * 1024 * 1024);
@@ -61,6 +73,28 @@ async fn main() {
         directory: args.directory,
         jwt_secret: args.jwt_secret,
     });
+    let tls_key : String;
+    let tls_chain : String;
+    // if we have environment variable JWT_SECRET, use it
+    if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
+        app_state.jwt_secret = jwt_secret;
+    }
+    // do we have CERTBOT_DOMAIN? Then certificates are in /certs/live/${CERTBOT_DOMAIN}/
+    // fullchain.pem and privkey.pem
+    if let Ok(certbot_domain) = std::env::var("CERTBOT_DOMAIN") {
+        tls_key = format!("/certs/live/{}/privkey.pem", certbot_domain);
+        tls_chain = format!("/certs/live/{}/fullchain.pem", certbot_domain);
+        // check if the file exists
+        if wait_for_file(&tls_key) {
+            println!("Using TLS key from /certs/live/{}/privkey.pem", certbot_domain);
+        } else {
+            eprintln!("Error: TLS key file {} does not exist", tls_key);
+            std::process::exit(1);
+        }
+    } else {
+        tls_key = String::new();
+        tls_chain = String::new();
+    }
     if !verify_submission_path(&app_state.directory) {
         eprintln!("Error: submissions path {} does not exist or is not a directory", app_state.directory);
         std::process::exit(1);
@@ -74,14 +108,31 @@ async fn main() {
         eprintln!("Warning: JWT secret is empty, disabling authentication");
     }
     println!("Listening on {}:{}, submissions path: {}", args.host, args.port, app_state.directory);
-    // change body limit to 512MB
-    let app = Router::new()
-        .route("/submit", post(receive_submission))
-        .with_state(app_state)
-        .layer(limit_layer)
-        .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
-    let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
-    axum::serve(tcp_listener, app).await.unwrap();
+    // plain http if tls_key is empty
+    if tls_key.is_empty() {
+        println!("Starting HTTP server");
+        let app = Router::new()
+            .route("/submit", post(receive_submission))
+            .with_state(app_state)
+            .layer(limit_layer)
+            .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
+        let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
+        axum::serve(tcp_listener, app).await.unwrap();
+    } else {
+        println!("Starting HTTPS server with TLS key: {} and chain: {}", tls_key, tls_chain);
+        let app = Router::new()
+            .route("/submit", post(receive_submission))
+            .with_state(app_state)
+            .layer(limit_layer)
+            .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
+        let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
+        let tls_config = RustlsConfig::from_pem_file(tls_key, tls_chain).await.unwrap();
+        let address = format!("{}:{}", args.host, args.port);
+        axum_server::bind_rustls(address, tls_config)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    }
 }
 
 fn verify_auth(headers: HeaderMap, state: Arc<AppState>) -> Result<(), String> {
