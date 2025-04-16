@@ -133,7 +133,7 @@ async fn main() {
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
         //let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
-        let tls_config = RustlsConfig::from_pem_file(tls_key, tls_chain).await.unwrap();
+        let tls_config = RustlsConfig::from_pem_file(tls_chain, tls_key).await.unwrap();
         let address = format!("{}:{}", args.host, args.port);
         let addr = SocketAddr::from(address.parse::<std::net::SocketAddr>().unwrap());
         axum_server::bind_rustls(addr, tls_config)
