@@ -25,6 +25,8 @@ use tokio::net::TcpListener;
 use axum::Router;
 use tower_http::limit::RequestBodyLimitLayer;
 use axum_server::tls_rustls::RustlsConfig;
+use std::net::SocketAddr;
+
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -69,17 +71,20 @@ fn wait_for_file(path: &str) -> bool {
 async fn main() {
     let limit_layer = RequestBodyLimitLayer::new(512 * 1024 * 1024);
     let args = Args::parse();
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| args.jwt_secret.clone());
     let app_state = Arc::new(AppState {
         directory: args.directory,
-        jwt_secret: args.jwt_secret,
+        jwt_secret: jwt_secret,
     });
     let tls_key : String;
     let tls_chain : String;
-    // if we have environment variable JWT_SECRET, use it
+    // print if JWT_SECRET is set in env
     if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
         println!("Using JWT secret from environment variable");
-        app_state.jwt_secret = jwt_secret;
+    } else {
+        println!("Using JWT secret from command line argument");
     }
+
     // do we have CERTBOT_DOMAIN? Then certificates are in /certs/live/${CERTBOT_DOMAIN}/
     // fullchain.pem and privkey.pem
     if let Ok(certbot_domain) = std::env::var("CERTBOT_DOMAIN") {
@@ -126,10 +131,11 @@ async fn main() {
             .with_state(app_state)
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
-        let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
+        //let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
         let tls_config = RustlsConfig::from_pem_file(tls_key, tls_chain).await.unwrap();
         let address = format!("{}:{}", args.host, args.port);
-        axum_server::bind_rustls(address, tls_config)
+        let addr = SocketAddr::from(address.parse::<std::net::SocketAddr>().unwrap());
+        axum_server::bind_rustls(addr, tls_config)
             .serve(app.into_make_service())
             .await
             .unwrap();
