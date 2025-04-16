@@ -551,10 +551,11 @@ def main():
 
     if args.token:
         with open(args.token, "r") as f:
-            token = f.read().strip()
-            if not token:
+            jwt = f.read().strip()
+            if not jwt:
                 print("Token is empty")
                 return
+            token = f"Bearer {jwt}"
 
     if args.submission:
         with open(args.submission, "r") as f:

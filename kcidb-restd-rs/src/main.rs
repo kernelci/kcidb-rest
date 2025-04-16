@@ -158,7 +158,11 @@ fn verify_auth(headers: HeaderMap, state: Arc<AppState>) -> Result<(), String> {
         Ok(jwt_str) => jwt_str,
         Err(_) => return Err("Missing or invalid JWT".to_string()),
     };
-    let jwt_str = jwt_str.split(" ").nth(1).unwrap();
+    let jwt_str_r = jwt_str.split(" ").nth(1);
+    let jwt_str = match jwt_str_r {
+        Some(jwt_str) => jwt_str,
+        None => return Err("Missing or invalid JWT (Bearer)".to_string()),
+    };
     let jwt = verify_jwt(jwt_str, &state.jwt_secret);
     match jwt {
         Ok(jwt) => Ok(()),

@@ -19,6 +19,7 @@ import requests
 from logspec_api import generate_issues_and_incidents
 import kcidb
 import argparse
+import time
 
 
 def set_test_processed(cursor, test_id):
@@ -236,4 +237,7 @@ def main():
     cursor.close()
 
 if __name__ == "__main__":
-    main()
+    while True:
+        main()
+        # sleep for 10 seconds
+        time.sleep(10)
