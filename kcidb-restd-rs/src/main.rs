@@ -62,6 +62,7 @@ fn wait_for_file(path: &str) -> bool {
         if path.exists() {
             return true;
         }
+        println!("Waiting for file {} to be created", path.display());
         std::thread::sleep(std::time::Duration::from_millis(1000));
     }
     false
@@ -88,11 +89,11 @@ async fn main() {
     // do we have CERTBOT_DOMAIN? Then certificates are in /certs/live/${CERTBOT_DOMAIN}/
     // fullchain.pem and privkey.pem
     if let Ok(certbot_domain) = std::env::var("CERTBOT_DOMAIN") {
-        tls_key = format!("/certs/live/{}/privkey.pem", certbot_domain);
-        tls_chain = format!("/certs/live/{}/fullchain.pem", certbot_domain);
+        tls_key = format!("/etc/letsencrypt/live/{}/privkey.pem", certbot_domain);
+        tls_chain = format!("/etc/letsencrypt/live/{}/fullchain.pem", certbot_domain);
         // check if the file exists
         if wait_for_file(&tls_key) {
-            println!("Using TLS key from /certs/live/{}/privkey.pem", certbot_domain);
+            println!("Using TLS key from /etc/letsencrypt/live/{}/privkey.pem", certbot_domain);
         } else {
             eprintln!("Error: TLS key file {} does not exist", tls_key);
             std::process::exit(1);
