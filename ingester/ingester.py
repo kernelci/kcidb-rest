@@ -28,8 +28,9 @@ def get_db_client(database):
     db = kcidb.db.Client(database)
     return db
 
-def ingest_submissions(spool_dir):
-    db_client = get_db_client(DATABASE)
+def ingest_submissions(spool_dir, db_client=None):
+    if db_client is None:
+        raise Exception("db_client is None")
     io_schema = db_client.get_schema()[1]
     # iterate over all files in the directory spool_dir
     for filename in os.listdir(spool_dir):
@@ -61,8 +62,9 @@ def main():
     parser.add_argument("--spool-dir", type=str, required=True)
     args = parser.parse_args()
     get_db_credentials()
+    db_client = get_db_client(DATABASE)
     while True:
-        ingest_submissions(args.spool_dir)
+        ingest_submissions(args.spool_dir, db_client)
         time.sleep(1)
 
 if __name__ == "__main__":

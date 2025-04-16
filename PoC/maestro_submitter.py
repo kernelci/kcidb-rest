@@ -14,6 +14,8 @@ import argparse
 from pydantic import AnyUrl
 
 
+KCIDB_REST_ENDPOINT = "https://kcidb-rest.westus2.cloudapp.azure.com/submit"
+
 MISSED_TEST_CODES = (
     "Bug",
     "Configuration",
@@ -429,10 +431,10 @@ the test: {sub_path}"
 
 # print("Converted JSON saved as 'kcidb_build_output.json'")
 
-def submit_kcidb_node(json_str):
-    hdr = {"Authorization": "your_api_key_here", "Content-Type": "application/json"}
+def submit_kcidb_node(json_str, token):
+    hdr = {"Authorization": token, "Content-Type": "application/json"}
     encoded_json = json_str.encode('utf-8')
-    r = requests.post("http://172.179.234.197:7000/submit", headers=hdr, data=encoded_json)
+    r = requests.post(KCIDB_REST_ENDPOINT, headers=hdr, data=encoded_json)
     if r.status_code != 200:
         print(f"Error: {r.status_code} {r.text}")
         return False
@@ -537,16 +539,27 @@ def main():
     parser.add_argument(
         "-s", "--submission", type=str, help="Path to Maestro submission file"
     )
+    parser.add_argument(
+        "-t", "--token", type=str, help="JWT token file for authentication", default=".token"
+    )
 
+    token = None
     args = parser.parse_args()
     json_str = None
     if args.config:
         converter.pipeline_cfg_dir = args.config
 
+    if args.token:
+        with open(args.token, "r") as f:
+            token = f.read().strip()
+            if not token:
+                print("Token is empty")
+                return
+
     if args.submission:
         with open(args.submission, "r") as f:
             json_str = f.read()
-            if not submit_kcidb_node(json_str):
+            if not submit_kcidb_node(json_str, token):
                 print("Failed to submit")
                 return
     else:
@@ -562,7 +575,7 @@ def main():
             with open("submission.json", "w") as f:
                 f.write(json_str)
             print(f"Size of json: {len(json_str)}")                
-            if not submit_kcidb_node(json_str):
+            if not submit_kcidb_node(json_str, token):
                 print("Failed to submit")
                 return
 
