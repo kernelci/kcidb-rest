@@ -37,6 +37,10 @@ def ingest_submissions(spool_dir):
         try:
             with open(os.path.join(spool_dir, filename), "r") as f:
                 fsize = os.path.getsize(os.path.join(spool_dir, filename))
+                if fsize == 0:
+                    print(f"File {filename} is empty, skipping, deleting")
+                    os.remove(os.path.join(spool_dir, filename))
+                    continue
                 start_time = time.time()
                 print(f"File size: {fsize}")
                 data = json.loads(f.read())
