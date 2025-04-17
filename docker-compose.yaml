@@ -32,6 +32,7 @@ services:
       - .env
     volumes:
       - ./spool:/app/spool
+      - ./cache:/cache
     command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool"]
     restart: unless-stopped
 # TODO: This is complicated to set up, due dashboard on same server

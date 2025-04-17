@@ -29,7 +29,7 @@ def set_test_processed(cursor, test_id):
     Mark the test as processed in the shelve database
     """
     # shelve database
-    with shelve.open("processed_tests.db") as db:
+    with shelve.open("/cache/processed_tests.db") as db:
         if test_id not in db:
             db[test_id] = True
             print(f"Test {test_id} marked as processed")
@@ -41,7 +41,7 @@ def is_test_processed(test_id):
     """
     Check if the test is already processed
     """
-    with shelve.open("processed_tests.db") as db:
+    with shelve.open("/cache/processed_tests.db") as db:
         if test_id in db:
             return True
         else:
@@ -53,7 +53,7 @@ def set_build_processed(cursor, build_id):
     Mark the build as processed in the shelve database
     """
     # shelve database
-    with shelve.open("processed_builds.db") as db:
+    with shelve.open("/cache/processed_builds.db") as db:
         if build_id not in db:
             db[build_id] = True
             print(f"Build {build_id} marked as processed")
@@ -65,7 +65,7 @@ def is_build_processed(build_id):
     """
     Check if the build is already processed
     """
-    with shelve.open("processed_builds.db") as db:
+    with shelve.open("/cache/processed_builds.db") as db:
         if build_id in db:
             return True
         else:
@@ -149,7 +149,7 @@ def fetch_log_id(log_url):
     # generate ID as hash of URL
     log_id = hashlib.md5(log_url.encode()).hexdigest()
     # check if log_id exists in cache
-    cache_file = os.path.join("cache", log_id)
+    cache_file = os.path.join("/cache", log_id)
     if os.path.exists(cache_file):
         return log_id
     # fetch log from URL
@@ -189,7 +189,7 @@ def logspec_process_test(test):
     if log_id is None:
         print(f"Error fetching log {log_url}")
         return
-    log_file = os.path.join("cache", log_id)
+    log_file = os.path.join("/cache", log_id)
     parsed_node_id = test["id"]
     test_type = "boot"
     return generate_issues_and_incidents(test["id"], log_file, test_type)
@@ -206,7 +206,7 @@ def logspec_process_build(build):
     if log_id is None:
         print(f"Error fetching log {log_url}")
         return
-    log_file = os.path.join("cache", log_id)
+    log_file = os.path.join("/cache", log_id)
     parsed_node_id = build["id"]
     test_type = "build"
     return generate_issues_and_incidents(build["id"], log_file, test_type)
@@ -325,20 +325,23 @@ def main():
         print(f"Spool directory {spool_dir} does not exist")
         sys.exit(1)
     # verify if cache directory exists
-    if not os.path.exists("cache"):
-        os.makedirs("cache")
-    # verify if processed_tests.db exists
-    if not os.path.exists("processed_tests.db"):
-        with shelve.open("processed_tests.db") as db:
+    if not os.path.exists("/cache"):
+        os.makedirs("/cache")
+
+    if not os.path.exists("/cache/processed_tests.db"):
+        with shelve.open("/cache/processed_tests.db") as db:
             db["processed_tests"] = {}
+    if not os.path.exists("/cache/processed_builds.db"):
+        with shelve.open("/cache/processed_builds.db") as db:
+            db["processed_builds"] = {}
 
     # Connect to the database
     conn = get_db_connection()
     cursor = conn.cursor()
 
     while True:
-        process_tests(cursor, spool_dir)
         process_builds(cursor, spool_dir)
+        process_tests(cursor, spool_dir)
 
     conn.close()
     cursor.close()
