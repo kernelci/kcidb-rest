@@ -273,8 +273,6 @@ def process_tests(cursor, spool_dir):
             submit_to_kcidb(
                 res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
             )
-        else:
-            print(f"No issues or incidents found in test {test['id']}")
         # mark the test as processed (TODO: must be in database)
         set_test_processed(cursor, test["id"])
 
@@ -306,8 +304,6 @@ def process_builds(cursor, spool_dir):
             submit_to_kcidb(
                 res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
             )
-        else:
-            print(f"No issues or incidents found in build {build['id']}")
         # mark the build as processed (TODO: must be in database)
         set_build_processed(cursor, build["id"])
 
