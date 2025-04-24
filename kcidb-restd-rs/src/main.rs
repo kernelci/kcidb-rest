@@ -45,6 +45,14 @@ struct Args {
     jwt_secret: String,
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SubmissionStatus {
+    id: String,
+    status: String,
+    message: Option<String>,
+}
+
 struct AppState {    
     directory: String,
     jwt_secret: String,
@@ -179,7 +187,16 @@ async fn receive_submission(
     let auth_result = verify_auth(headers, state.clone());
     match auth_result {
         Ok(()) => (),
-        Err(e) => return (StatusCode::UNAUTHORIZED, e.to_string()),
+        Err(e) => {
+            println!("Error: {}", e);
+            let err_status = SubmissionStatus {
+                id: "0".to_string(),
+                status: "error".to_string(),
+                message: Some(e),
+            };
+            let err_json = serde_json::to_string(&err_status).unwrap();
+            return (StatusCode::UNAUTHORIZED, err_json);
+        }
     }
 
     let submission_json = serde_json::from_str::<serde_json::Value>(&body);
@@ -193,11 +210,26 @@ async fn receive_submission(
             // on completion, rename to submission.json
             std::fs::rename(&submission_file, &format!("{}/submission-{}.json", state.directory, submission_id)).unwrap();
             println!("Submission {} received", submission_id);
-            (StatusCode::OK, "Submission received".to_string())
+            let msg = format!("Received submission {} with size {} bytes", submission_id, size);
+
+            let status = SubmissionStatus {
+                id: submission_id,
+                status: "ok".to_string(),
+                message: Some(msg),
+            };
+            let jsonstr = serde_json::to_string(&status).unwrap();
+            println!("Submission status: {}", jsonstr);
+            (StatusCode::OK, jsonstr)
         }
         Err(e) => {
             println!("Error: {}", e);
-            (StatusCode::BAD_REQUEST, "Invalid submission format".to_string())
+            let err_status = SubmissionStatus {
+                id: "0".to_string(),
+                status: "error".to_string(),
+                message: Some(e.to_string()),
+            };
+            let err_json = serde_json::to_string(&err_status).unwrap();
+            (StatusCode::BAD_REQUEST, err_json)
         }
     }
 }
