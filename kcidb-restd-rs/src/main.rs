@@ -10,7 +10,7 @@ KCIDB-Rust REST submissions receiver
 
 */
 
-use axum::routing::post;
+use axum::routing::{post, get};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::extract::State;
@@ -137,6 +137,7 @@ async fn main() {
         println!("Starting HTTPS server with TLS key: {} and chain: {}", tls_key, tls_chain);
         let app = Router::new()
             .route("/submit", post(receive_submission))
+            .route("/status", get(submission_status))
             .with_state(app_state)
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
@@ -177,6 +178,64 @@ fn verify_auth(headers: HeaderMap, state: Arc<AppState>) -> Result<(), String> {
         Err(e) => Err(e.to_string()),
     }
 }
+
+
+fn generate_answer(
+    status: &str,
+    id: &str,
+    message: Option<String>,
+) -> String {
+    let status = SubmissionStatus {
+        id: id.to_string(),
+        status: status.to_string(),
+        message: message,
+    };
+    // serialize to json
+    let jsonstr = serde_json::to_string(&status).unwrap();
+    jsonstr   
+}
+
+/*
+/status?id=1234
+*/
+async fn submission_status(
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+    id: String,
+) -> impl IntoResponse {
+    let auth_result = verify_auth(headers, state.clone());
+    match auth_result {
+        Ok(()) => (),
+        Err(e) => {
+            println!("Error: {}", e);
+            let jsanswer = generate_answer("error", "0", Some(e));
+            return (StatusCode::UNAUTHORIZED, jsanswer);
+        }
+    }
+    // validate id for safe characters
+    if id.is_empty() {
+        let jsanswer = generate_answer("error", "0", Some("Empty id".to_string()));
+        return (StatusCode::BAD_REQUEST, jsanswer);
+    }
+
+    // id is alphanumeric
+    if !id.chars().all(|c| c.is_alphanumeric()) {
+        let jsanswer = generate_answer("error", "0", Some("Invalid id".to_string()));
+        return (StatusCode::BAD_REQUEST, jsanswer);
+    }
+
+    let submission_file = format!("{}/submission-{}.json.temp", state.directory, id);
+    // check if the file exists
+    if !Path::new(&submission_file).exists() {
+        let jsanswer = generate_answer("notfound", id.as_str(), Some("File not found".to_string()));
+        return (StatusCode::NOT_FOUND, jsanswer);
+    }
+
+    // check if the file is empty
+    let jsanswer = generate_answer("ok", id.as_str(), Some("File found".to_string()));
+    (StatusCode::OK, jsanswer)
+}
+
 
 // Answer STATUS 200 if the submission is valid
 async fn receive_submission(
