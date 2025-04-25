@@ -34,6 +34,10 @@ def ingest_submissions(spool_dir, db_client=None):
     io_schema = db_client.get_schema()[1]
     # iterate over all files in the directory spool_dir
     for filename in os.listdir(spool_dir):
+        # skip if not json
+        if not filename.endswith(".json"):
+            print(f"Skipping {filename}")
+            continue
         print(f"Ingesting {filename}")
         try:
             with open(os.path.join(spool_dir, filename), "r") as f:
@@ -61,8 +65,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
     args = parser.parse_args()
+    print("Starting ingestion process...")
     get_db_credentials()
     db_client = get_db_client(DATABASE)
+    print(f"Database: {DATABASE}")
     while True:
         ingest_submissions(args.spool_dir, db_client)
         time.sleep(1)
