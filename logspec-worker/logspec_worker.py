@@ -122,7 +122,7 @@ def get_unprocessed_tests(cursor):
         return tests
     except Exception as e:
         print(f"Error fetching unprocessed tests: {e}")
-        return []
+        raise e
 
 
 def get_unprocessed_builds(cursor):
