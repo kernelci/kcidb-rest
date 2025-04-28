@@ -23,13 +23,16 @@ import kcidb
 import argparse
 import time
 
+APP_STATE_DIR = "/app/state"
+TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
+BUILDS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_builds.db")
 
 def set_test_processed(cursor, test_id):
     """
     Mark the test as processed in the shelve database
     """
     # shelve database
-    with shelve.open("/cache/processed_tests.db") as db:
+    with shelve.open(TESTS_STATE_DB) as db:
         if test_id not in db:
             db[test_id] = True
             print(f"Test {test_id} marked as processed")
@@ -41,7 +44,7 @@ def is_test_processed(test_id):
     """
     Check if the test is already processed
     """
-    with shelve.open("/cache/processed_tests.db") as db:
+    with shelve.open(TESTS_STATE_DB) as db:
         if test_id in db:
             return True
         else:
@@ -53,7 +56,7 @@ def set_build_processed(cursor, build_id):
     Mark the build as processed in the shelve database
     """
     # shelve database
-    with shelve.open("/cache/processed_builds.db") as db:
+    with shelve.open(BUILDS_STATE_DB) as db:
         if build_id not in db:
             db[build_id] = True
             print(f"Build {build_id} marked as processed")
@@ -65,7 +68,7 @@ def is_build_processed(build_id):
     """
     Check if the build is already processed
     """
-    with shelve.open("/cache/processed_builds.db") as db:
+    with shelve.open(BUILDS_STATE_DB) as db:
         if build_id in db:
             return True
         else:
@@ -308,6 +311,19 @@ def process_builds(cursor, spool_dir):
         set_build_processed(cursor, build["id"])
 
 
+def verify_appstate():
+    """
+    Verify if the appstate directories exist
+    """
+    if not os.path.exists("/app/state"):
+        os.makedirs("/app/state")
+    if not os.path.exists(TESTS_STATE_DB):
+        with shelve.open(TESTS_STATE_DB) as db:
+            db["processed_tests"] = {}
+    if not os.path.exists(BUILDS_STATE_DB):
+        with shelve.open(BUILDS_STATE_DB) as db:
+            db["processed_builds"] = {}
+
 def main():
     """
     Main function to process the logspec
@@ -323,13 +339,8 @@ def main():
     # verify if cache directory exists
     if not os.path.exists("/cache"):
         os.makedirs("/cache")
-
-    if not os.path.exists("/cache/processed_tests.db"):
-        with shelve.open("/cache/processed_tests.db") as db:
-            db["processed_tests"] = {}
-    if not os.path.exists("/cache/processed_builds.db"):
-        with shelve.open("/cache/processed_builds.db") as db:
-            db["processed_builds"] = {}
+    # verify if appstate directory and db exists
+    verify_appstate()
 
     # Connect to the database
     conn = get_db_connection()
