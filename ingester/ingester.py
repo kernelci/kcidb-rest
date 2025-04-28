@@ -28,6 +28,15 @@ def get_db_client(database):
     db = kcidb.db.Client(database)
     return db
 
+
+def move_file_to_failed_dir(filename, failed_dir):
+    try:
+        os.rename(filename, os.path.join(failed_dir, os.path.basename(filename)))
+    except Exception as e:
+        print(f"Error moving file {filename} to failed directory: {e}")
+        raise e
+
+
 def ingest_submissions(spool_dir, db_client=None):
     if db_client is None:
         raise Exception("db_client is None")
@@ -48,10 +57,18 @@ def ingest_submissions(spool_dir, db_client=None):
                     continue
                 start_time = time.time()
                 print(f"File size: {fsize}")
-                data = json.loads(f.read())
-                data = io_schema.validate(data)
-                data = io_schema.upgrade(data, copy=False)
-                db_client.load(data)
+                try:
+                    data = json.loads(f.read())
+                    data = io_schema.validate(data)
+                    data = io_schema.upgrade(data, copy=False)
+                    db_client.load(data)
+                except Exception as e:
+                    print(f"Error loading data: {e}")
+                    print(f"File: {filename}")
+                    # move the file to the failed directory for later inspection
+                    failed_dir = os.path.join(spool_dir, "failed")
+                    move_file_to_failed_dir(os.path.join(spool_dir, filename), failed_dir)
+                    continue
                 ing_speed = fsize / (time.time() - start_time) / 1024
                 print(f"Ingested {filename} in {ing_speed} KB/s")
                 # delete the file
@@ -61,11 +78,34 @@ def ingest_submissions(spool_dir, db_client=None):
             print(f"File: {filename}")
             raise e
 
+
+def verify_spool_dirs(spool_dir):
+    if not os.path.exists(spool_dir):
+        print(f"Spool directory {spool_dir} does not exist")
+        raise Exception(f"Spool directory {spool_dir} does not exist")
+    if not os.path.isdir(spool_dir):
+        raise Exception(f"Spool directory {spool_dir} is not a directory")
+    if not os.access(spool_dir, os.W_OK):
+        raise Exception(f"Spool directory {spool_dir} is not writable")
+    print(f"Spool directory {spool_dir} is valid and writable")
+    # we need also ${spool_dir}/failed
+    failed_dir = os.path.join(spool_dir, "failed")
+    if not os.path.exists(failed_dir):
+        print(f"Failed directory {failed_dir} does not exist, creating")
+        os.makedirs(failed_dir)
+    if not os.path.isdir(failed_dir):
+        raise Exception(f"Failed directory {failed_dir} is not a directory")
+    if not os.access(failed_dir, os.W_OK):
+        raise Exception(f"Failed directory {failed_dir} is not writable")
+    print(f"Failed directory {failed_dir} is valid and writable")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
     args = parser.parse_args()
     print("Starting ingestion process...")
+    verify_spool_dirs(args.spool_dir)
     get_db_credentials()
     db_client = get_db_client(DATABASE)
     print(f"Database: {DATABASE}")
