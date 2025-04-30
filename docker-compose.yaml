@@ -38,6 +38,13 @@ services:
       - ./state:/app/state
     command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool"]
     restart: unless-stopped
+  postgres:
+    container_name: 'kernelci-pipeline-postgres-proxy'
+    image: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest'
+    command: 'kernelci-production:us-central1:postgresql2 -c/config/db.json -a0.0.0.0'
+    volumes:
+      - './config:/config'
+    restart: on-failure
 # TODO: This is complicated to set up, due dashboard on same server
 #  certbot:
 #    image: certbot/certbot
