@@ -245,10 +245,15 @@ def submit_to_kcidb(issues, incidents, spool_dir):
     # random part of filename
     random_part = os.urandom(8).hex()
     # generate filename
-    filename = f"logspec_{random_part}.json"
+    filename = f"logspec_{random_part}.json.temp"
     # drop it as json in spool_dir
     with open(os.path.join(spool_dir, filename), "w") as f:
         f.write(raw_json)
+    # rename it to .json
+    os.rename(
+        os.path.join(spool_dir, filename),
+        os.path.join(spool_dir, filename[:-5] + ".json"),
+    )
 
 
 def process_tests(cursor, spool_dir):
