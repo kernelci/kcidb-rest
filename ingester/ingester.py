@@ -45,7 +45,7 @@ def ingest_submissions(spool_dir, db_client=None):
     for filename in os.listdir(spool_dir):
         # skip if not json
         if not filename.endswith(".json"):
-            print(f"Skipping {filename}")
+            #print(f"Skipping invalid extension {filename}")
             continue
         print(f"Ingesting {filename}")
         try:

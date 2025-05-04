@@ -10,23 +10,22 @@ KCIDB-Rust REST submissions receiver
 
 */
 
-use axum::routing::{post, get};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::Router;
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::http::header::HeaderMap;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
+use jsonwebtoken::{DecodingKey, Validation, decode};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
-use rand::Rng;
-use jsonwebtoken::{decode, Validation, DecodingKey};
 use tokio::net::TcpListener;
-use axum::Router;
 use tower_http::limit::RequestBodyLimitLayer;
-use axum_server::tls_rustls::RustlsConfig;
-use std::net::SocketAddr;
-
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -45,7 +44,6 @@ struct Args {
     jwt_secret: String,
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 struct SubmissionStatus {
     id: String,
@@ -53,7 +51,7 @@ struct SubmissionStatus {
     message: Option<String>,
 }
 
-struct AppState {    
+struct AppState {
     directory: String,
     jwt_secret: String,
 }
@@ -85,10 +83,10 @@ async fn main() {
         directory: args.directory,
         jwt_secret: jwt_secret,
     });
-    let tls_key : String;
-    let tls_chain : String;
+    let tls_key: String;
+    let tls_chain: String;
     // print if JWT_SECRET is set in env
-    if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
+    if let Ok(_jwt_secret) = std::env::var("JWT_SECRET") {
         println!("Using JWT secret from environment variable");
     } else {
         println!("Using JWT secret from command line argument");
@@ -101,7 +99,10 @@ async fn main() {
         tls_chain = format!("/etc/letsencrypt/live/{}/fullchain.pem", certbot_domain);
         // check if the file exists
         if wait_for_file(&tls_key) {
-            println!("Using TLS key from /etc/letsencrypt/live/{}/privkey.pem", certbot_domain);
+            println!(
+                "Using TLS key from /etc/letsencrypt/live/{}/privkey.pem",
+                certbot_domain
+            );
         } else {
             eprintln!("Error: TLS key file {} does not exist", tls_key);
             std::process::exit(1);
@@ -111,7 +112,10 @@ async fn main() {
         tls_chain = String::new();
     }
     if !verify_submission_path(&app_state.directory) {
-        eprintln!("Error: submissions path {} does not exist or is not a directory", app_state.directory);
+        eprintln!(
+            "Error: submissions path {} does not exist or is not a directory",
+            app_state.directory
+        );
         std::process::exit(1);
     }
     // if default value - warn
@@ -122,7 +126,10 @@ async fn main() {
     if app_state.jwt_secret.is_empty() {
         eprintln!("Warning: JWT secret is empty, disabling authentication");
     }
-    println!("Listening on {}:{}, submissions path: {}", args.host, args.port, app_state.directory);
+    println!(
+        "Listening on {}:{}, submissions path: {}",
+        args.host, args.port, app_state.directory
+    );
     // plain http if tls_key is empty
     if tls_key.is_empty() {
         println!("Starting HTTP server");
@@ -134,7 +141,10 @@ async fn main() {
         let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
         axum::serve(tcp_listener, app).await.unwrap();
     } else {
-        println!("Starting HTTPS server with TLS key: {} and chain: {}", tls_key, tls_chain);
+        println!(
+            "Starting HTTPS server with TLS key: {} and chain: {}",
+            tls_key, tls_chain
+        );
         let app = Router::new()
             .route("/submit", post(receive_submission))
             .route("/status", get(submission_status))
@@ -142,7 +152,9 @@ async fn main() {
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
         //let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
-        let tls_config = RustlsConfig::from_pem_file(tls_chain, tls_key).await.unwrap();
+        let tls_config = RustlsConfig::from_pem_file(tls_chain, tls_key)
+            .await
+            .unwrap();
         let address = format!("{}:{}", args.host, args.port);
         let addr = SocketAddr::from(address.parse::<std::net::SocketAddr>().unwrap());
         axum_server::bind_rustls(addr, tls_config)
@@ -174,17 +186,12 @@ fn verify_auth(headers: HeaderMap, state: Arc<AppState>) -> Result<(), String> {
     };
     let jwt = verify_jwt(jwt_str, &state.jwt_secret);
     match jwt {
-        Ok(jwt) => Ok(()),
+        Ok(_jwt) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
 }
 
-
-fn generate_answer(
-    status: &str,
-    id: &str,
-    message: Option<String>,
-) -> String {
+fn generate_answer(status: &str, id: &str, message: Option<String>) -> String {
     let status = SubmissionStatus {
         id: id.to_string(),
         status: status.to_string(),
@@ -192,7 +199,7 @@ fn generate_answer(
     };
     // serialize to json
     let jsonstr = serde_json::to_string(&status).unwrap();
-    jsonstr   
+    jsonstr
 }
 
 /*
@@ -236,7 +243,6 @@ async fn submission_status(
     (StatusCode::OK, jsanswer)
 }
 
-
 // Answer STATUS 200 if the submission is valid
 async fn receive_submission(
     headers: HeaderMap,
@@ -260,16 +266,24 @@ async fn receive_submission(
 
     let submission_json = serde_json::from_str::<serde_json::Value>(&body);
     match submission_json {
-        Ok(submission) => {
+        Ok(_submission) => {
             let size = body.len();
             println!("Received submission size: {}", size);
             let submission_id = random_string(32);
-            let submission_file = format!("{}/submission-{}.json.temp", state.directory, submission_id);
+            let submission_file =
+                format!("{}/submission-{}.json.temp", state.directory, submission_id);
             std::fs::write(&submission_file, &body).unwrap();
             // on completion, rename to submission.json
-            std::fs::rename(&submission_file, &format!("{}/submission-{}.json", state.directory, submission_id)).unwrap();
+            std::fs::rename(
+                &submission_file,
+                &format!("{}/submission-{}.json", state.directory, submission_id),
+            )
+            .unwrap();
             println!("Submission {} received", submission_id);
-            let msg = format!("Received submission {} with size {} bytes", submission_id, size);
+            let msg = format!(
+                "Received submission {} with size {} bytes",
+                submission_id, size
+            );
 
             let status = SubmissionStatus {
                 id: submission_id,
@@ -313,7 +327,6 @@ fn generate_jwt(origin: &str, gendate: &str, secret: &str) -> Result<String, jso
     Ok(token)
 }
 */
-
 
 // TODO: Fix this
 fn random_string(length: usize) -> String {
