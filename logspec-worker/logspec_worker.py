@@ -349,6 +349,8 @@ def main():
     while True:
         process_builds(cursor, spool_dir)
         process_tests(cursor, spool_dir)
+        # sleep 60 seconds
+        time.sleep(60)
 
     conn.close()
     cursor.close()
