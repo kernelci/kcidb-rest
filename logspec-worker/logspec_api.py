@@ -67,7 +67,7 @@ def get_logspec_errors(parsed_data, parser):
     if parser == 'generic_linux_boot':
         def create_special_boot_error(summary):
             error_dict = {
-                'error_type': 'maestro.linux.kernel.boot',
+                'error_type': 'linux.kernel.boot',
                 'error_summary': summary,
                 'signature': parsed_data['_signature'],
                 'log_excerpt': '',
@@ -106,7 +106,7 @@ def get_logspec_errors(parsed_data, parser):
     return errors_list, new_status
 
 
-def new_issue(logspec_error, test_type):
+def new_issue(logspec_error, test_type, origin):
     """Generates a new KCIDB issue object from a logspec error for a
     specific object type.
     Returns the issue as a dict.
@@ -124,8 +124,8 @@ def new_issue(logspec_error, test_type):
             comment += f" ({error_copy['error']['script']})"
     comment += f" [logspec:{test_types[test_type]['parser']},{error_copy['error']['error_type']}]"
     issue = {
-        'origin': 'maestro',
-        'id': f'maestro:{signature}',
+        'origin': origin,
+        'id': f'{origin}:{signature}',
         'version': 1,
         'comment': comment,
         'misc': {
@@ -146,7 +146,8 @@ def new_issue(logspec_error, test_type):
     return issue
 
 
-def new_incident(result_id, issue_id, test_type, issue_version):
+def new_incident(result_id, issue_id, test_type, issue_version,
+                 origin):
     """Generates a new KCIDB incident object for a specific object type
     from an issue id.
     Returns the incident as a dict.
@@ -155,12 +156,12 @@ def new_incident(result_id, issue_id, test_type, issue_version):
                                sort_keys=True, ensure_ascii=False)
     incident_id = hashlib.sha1(id_components.encode('utf-8')).hexdigest()
     incident = {
-        'id': f"maestro:{incident_id}",
+        'id': f"{origin}:{incident_id}",
         'issue_id': issue_id,
         'issue_version': issue_version,
         test_types[test_type]['incident_id_field']: result_id,
         'comment': "test incident, automatically generated",
-        'origin': 'maestro',
+        'origin': origin,
         'present': True,
     }
     return incident
@@ -185,7 +186,7 @@ def process_log(log_file, parser, start_state):
     return get_logspec_errors(parsed_data, parser)
 
 
-def generate_issues_and_incidents(result_id, log_file, test_type):
+def generate_issues_and_incidents(result_id, log_file, test_type, origin):
     parsed_data = {
         'issue_node': [],
         'incident_node': [],
@@ -202,11 +203,11 @@ def generate_issues_and_incidents(result_id, log_file, test_type):
             if error['error'].get('error_type') == 'linux.kernel.error_return_code':
                 continue
 
-            issue = new_issue(error, test_type)
+            issue = new_issue(error, test_type, origin)
             parsed_data['issue_node'].append(issue)
             issue_id = issue["id"]
             issue_version = issue["version"]
-            parsed_data['incident_node'].append(new_incident(result_id, issue_id, test_type, issue_version))
+            parsed_data['incident_node'].append(new_incident(result_id, issue_id, test_type, issue_version, origin))
 
     # Remove duplicate issues
     parsed_data['issue_node'] = list({issue["id"]: issue for issue in parsed_data['issue_node']}.values())

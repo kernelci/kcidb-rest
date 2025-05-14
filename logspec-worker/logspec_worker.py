@@ -193,8 +193,7 @@ def logspec_process_node(node, kind):
         print(f"Error fetching log {log_url}")
         return
     log_file = os.path.join("/cache", log_id)
-    parsed_node_id = node["id"]
-    return generate_issues_and_incidents(node["id"], log_file, kind)
+    return generate_issues_and_incidents(node["id"], log_file, kind, node["origin"])
 
 
 def remove_none_fields(data):
@@ -272,7 +271,7 @@ def process_tests(cursor, args):
             else:
                 print("Dry run - not submitting tests to kcidb, just printing")
                 print(json.dumps(res_nodes, indent=4))
-                
+
         # mark the test as processed (TODO: must be in database)
         set_test_processed(cursor, test["id"])
 
