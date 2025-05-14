@@ -180,12 +180,12 @@ def fetch_log_id(log_url):
         return None
 
 
-# TODO: unify this with logspec_process_build
-def logspec_process_test(test):
+def logspec_process_node(node, kind):
     """
     Process the test over logspec
+    Allowed values for kind are: build, boot, test
     """
-    log_url = test["log_url"]
+    log_url = node["log_url"]
     log_id = fetch_log_id(log_url)
     print(f"Log ID: {log_id}")
     # check if log_id is None
@@ -193,26 +193,8 @@ def logspec_process_test(test):
         print(f"Error fetching log {log_url}")
         return
     log_file = os.path.join("/cache", log_id)
-    parsed_node_id = test["id"]
-    test_type = "boot"
-    return generate_issues_and_incidents(test["id"], log_file, test_type)
-
-
-def logspec_process_build(build):
-    """
-    Process the build over logspec
-    """
-    log_url = build["log_url"]
-    log_id = fetch_log_id(log_url)
-    print(f"Log ID: {log_id}")
-    # check if log_id is None
-    if log_id is None:
-        print(f"Error fetching log {log_url}")
-        return
-    log_file = os.path.join("/cache", log_id)
-    parsed_node_id = build["id"]
-    test_type = "build"
-    return generate_issues_and_incidents(build["id"], log_file, test_type)
+    parsed_node_id = node["id"]
+    return generate_issues_and_incidents(node["id"], log_file, kind)
 
 
 def remove_none_fields(data):
@@ -274,7 +256,7 @@ def process_tests(cursor, spool_dir):
         # Process the test
         print(f"Processing test {test['id']}")
         # Call logspec
-        res_nodes, new_status = logspec_process_test(test)
+        res_nodes, new_status = logspec_process_node(test, "test")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             # submit to kcidb incident and issue
             print(f"Submitting to kcidb")
@@ -305,7 +287,7 @@ def process_builds(cursor, spool_dir):
         # Process the build
         print(f"Processing build {build['id']}")
         # Call logspec
-        res_nodes, new_status = logspec_process_build(build)
+        res_nodes, new_status = logspec_process_node(build, "build")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             # submit to kcidb incident and issue
             print(f"Submitting to kcidb")
