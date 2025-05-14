@@ -108,7 +108,7 @@ def get_db_connection():
         sys.exit(1)
 
 
-def get_unprocessed_tests(cursor):
+def get_unprocessed_tests(cursor, origins):
     """
     Get unprocessed tests from the database
     """
@@ -116,11 +116,11 @@ def get_unprocessed_tests(cursor):
     last_24h = datetime.datetime.now() - datetime.timedelta(days=1)
     #
     try:
-        cursor.execute(
+        query = (
             "SELECT * FROM tests WHERE _timestamp > %s AND log_url IS NOT NULL"
-            " AND status != 'PASS'",
-            (last_24h,),
+            " AND status != 'PASS' AND origin = ANY(%s)"
         )
+        cursor.execute(query, (last_24h, origins))
         tests = cursor.fetchall()
         return tests
     except Exception as e:
@@ -128,7 +128,7 @@ def get_unprocessed_tests(cursor):
         raise e
 
 
-def get_unprocessed_builds(cursor):
+def get_unprocessed_builds(cursor, origins):
     """
     Get unprocessed builds from the database
     """
@@ -136,11 +136,11 @@ def get_unprocessed_builds(cursor):
     last_24h = datetime.datetime.now() - datetime.timedelta(days=1)
     #
     try:
-        cursor.execute(
+        query = (
             "SELECT * FROM builds WHERE _timestamp > %s AND log_url IS NOT NULL"
-            " AND status != 'PASS'",
-            (last_24h,),
+            " AND status != 'PASS' AND origin = ANY(%s)"
         )
+        cursor.execute(query, (last_24h, origins))
         builds = cursor.fetchall()
         return builds
     except Exception as e:
@@ -238,9 +238,9 @@ def submit_to_kcidb(issues, incidents, spool_dir):
     )
 
 
-def process_tests(cursor, spool_dir):
+def process_tests(cursor, spool_dir, origins):
     # code to get unprocessed tests
-    unprocessed_tests = get_unprocessed_tests(cursor)
+    unprocessed_tests = get_unprocessed_tests(cursor, origins)
     if not unprocessed_tests:
         print("No unprocessed tests found")
         return
@@ -267,7 +267,7 @@ def process_tests(cursor, spool_dir):
         set_test_processed(cursor, test["id"])
 
 
-def process_builds(cursor, spool_dir):
+def process_builds(cursor, spool_dir, origins):
     """
     Process the builds
     """
@@ -317,6 +317,7 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
+    parser.add_argument("--origins", nargs='+', required=True, help="origins to process")
     args = parser.parse_args()
     spool_dir = args.spool_dir
     # check if spool_dir exists
@@ -334,8 +335,8 @@ def main():
     cursor = conn.cursor()
 
     while True:
-        process_builds(cursor, spool_dir)
-        process_tests(cursor, spool_dir)
+        process_builds(cursor, spool_dir, args.origins)
+        process_tests(cursor, spool_dir, args.origins)
         # sleep 60 seconds
         time.sleep(60)
 
