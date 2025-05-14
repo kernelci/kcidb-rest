@@ -238,7 +238,12 @@ def submit_to_kcidb(issues, incidents, spool_dir):
     )
 
 
-def process_tests(cursor, spool_dir, origins):
+def process_tests(cursor, args):
+    """
+    Process the tests
+    """
+    spool_dir = args.spool_dir
+    origins = args.origins
     # code to get unprocessed tests
     unprocessed_tests = get_unprocessed_tests(cursor, origins)
     if not unprocessed_tests:
@@ -258,19 +263,26 @@ def process_tests(cursor, spool_dir, origins):
         # Call logspec
         res_nodes, new_status = logspec_process_node(test, "test")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
-            # submit to kcidb incident and issue
-            print(f"Submitting to kcidb")
-            submit_to_kcidb(
-                res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
-            )
+            if not args.dry_run:
+                # submit to kcidb incident and issue
+                print(f"Submitting to kcidb")
+                submit_to_kcidb(
+                    res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
+                )
+            else:
+                print("Dry run - not submitting tests to kcidb, just printing")
+                print(json.dumps(res_nodes, indent=4))
+                
         # mark the test as processed (TODO: must be in database)
         set_test_processed(cursor, test["id"])
 
 
-def process_builds(cursor, spool_dir, origins):
+def process_builds(cursor, args):
     """
     Process the builds
     """
+    spool_dir = args.spool_dir
+    origins = args.origins
     # get unprocessed builds
     unprocessed_builds = get_unprocessed_builds(cursor)
     if not unprocessed_builds:
@@ -290,10 +302,14 @@ def process_builds(cursor, spool_dir, origins):
         res_nodes, new_status = logspec_process_node(build, "build")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             # submit to kcidb incident and issue
-            print(f"Submitting to kcidb")
-            submit_to_kcidb(
-                res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
-            )
+            if not args.dry_run:
+                print(f"Submitting to kcidb")
+                submit_to_kcidb(
+                    res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
+                )
+            else:
+                print("Dry run - not submitting builds to kcidb, just printing")
+                print(json.dumps(res_nodes, indent=4))
         # mark the build as processed (TODO: must be in database)
         set_build_processed(cursor, build["id"])
 
@@ -318,6 +334,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
     parser.add_argument("--origins", nargs='+', required=True, help="origins to process")
+    parser.add_argument("--dry-run", action="store_true", help="dry run")
     args = parser.parse_args()
     spool_dir = args.spool_dir
     # check if spool_dir exists
@@ -335,8 +352,8 @@ def main():
     cursor = conn.cursor()
 
     while True:
-        process_builds(cursor, spool_dir, args.origins)
-        process_tests(cursor, spool_dir, args.origins)
+        process_builds(cursor, args)
+        process_tests(cursor, args)
         # sleep 60 seconds
         time.sleep(60)
 
