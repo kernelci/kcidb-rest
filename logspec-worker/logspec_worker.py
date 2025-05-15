@@ -81,7 +81,8 @@ def get_db_connection():
     """
     # pg_dsn = "postgresql://kcidb:kcidb@localhost:5432/kcidb"
     # check .pg_dsn file
-    pg_dsn = None
+    pg_dsn = os.environ.get("PG_URI")
+
     if os.path.exists(".pg_dsn"):
         with open(".pg_dsn", "r") as f:
             pg_dsn = f.read().strip()
@@ -283,7 +284,7 @@ def process_builds(cursor, args):
     spool_dir = args.spool_dir
     origins = args.origins
     # get unprocessed builds
-    unprocessed_builds = get_unprocessed_builds(cursor)
+    unprocessed_builds = get_unprocessed_builds(cursor, origins)
     if not unprocessed_builds:
         print("No unprocessed builds found")
         return

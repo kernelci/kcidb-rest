@@ -39,12 +39,35 @@ services:
     command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool", "--origins", "microsoft"]
     restart: unless-stopped
   postgres:
-    container_name: 'kernelci-pipeline-postgres-proxy'
+    container_name: 'postgres'
     image: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest'
     command: 'kernelci-production:us-central1:postgresql2 -c/config/db.json -a0.0.0.0'
     volumes:
       - './config:/config'
     restart: on-failure
+    profiles: ["google-cloud-sql"]
+  db:
+    image: postgres:17
+    container_name: 'postgres'
+    env_file:
+      - .env
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    profiles: ["self-hosted"]
+  dbinit:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbinit
+    container_name: 'dbinit'
+    env_file:
+      - .env
+    restart: "no"
+    profiles: ["self-hosted"]
+    depends_on:
+      - db
 # TODO: This is complicated to set up, due dashboard on same server
 #  certbot:
 #    image: certbot/certbot
