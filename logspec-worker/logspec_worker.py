@@ -291,7 +291,8 @@ def process_tests(cursor, args):
                 print(json.dumps(res_nodes, indent=4))
 
         # mark the test as processed (TODO: must be in database)
-        set_test_processed(cursor, test["id"])
+        if not args.dry_run:
+            set_test_processed(cursor, test["id"])
 
 
 def process_builds(cursor, args):
@@ -328,7 +329,8 @@ def process_builds(cursor, args):
                 print("Dry run - not submitting builds to kcidb, just printing")
                 print(json.dumps(res_nodes, indent=4))
         # mark the build as processed (TODO: must be in database)
-        set_build_processed(cursor, build["id"])
+        if not args.dry_run:
+            set_build_processed(cursor, build["id"])
 
 
 def verify_appstate():
@@ -354,6 +356,10 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="dry run")
     args = parser.parse_args()
     spool_dir = args.spool_dir
+    if args.dry_run:
+        print("Running in dry run mode, not submitting to kcidb")
+        print("WARNING: Dry run will not set internal state as processed")
+        print("To avoid expensive reprocessing, it will process only once")
     # check if spool_dir exists
     if not os.path.exists(spool_dir):
         print(f"Spool directory {spool_dir} does not exist")
@@ -372,6 +378,9 @@ def main():
         process_builds(cursor, args)
         process_tests(cursor, args)
         # sleep 60 seconds
+        if args.dry_run:
+            print("Dry run - sleeping 6 hours")
+            time.sleep(6 * 60 * 60)
         time.sleep(60)
 
     conn.close()
