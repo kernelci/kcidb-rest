@@ -1,0 +1,19 @@
+FROM python:3.13-slim
+
+# Set the working directory
+WORKDIR /app
+
+# Install postgresql client, git
+RUN apt-get update && apt-get install -y postgresql-client git curl postgresql-server-dev-all build-essential libpq-dev
+
+
+# pip3 install --user git+https://github.com/kernelci/kcidb.git
+RUN pip3 install --no-cache-dir git+https://github.com/kernelci/kcidb.git
+
+
+COPY dbinit/dbinit.sh /app/dbinit.sh
+
+RUN chmod +x /app/dbinit.sh
+
+# Set the entrypoint to the script
+ENTRYPOINT ["/app/dbinit.sh"]
