@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
-#
-# SPDX-License-Identifier: LGPL-2.1-or-later
-#
-# Copyright (C) 2024 Collabora Limited
+# SPDX-License-Identifier: LGPL-2.1-only
+# Copyright (C) 2024-2025 Collabora Limited
+# Author: Denys Fedoryshchenko <denys.f@collabora.com>
 # Author: Ricardo Cañuelo <ricardo.canuelo@collabora.com>
 # Author: Helen Mae Koike Fornazier <helen.koike@collabora.com>
 # Author: Jeny Sadadia <jeny.sadadia@collabora.com>
+#
+# This library is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the Free
+# Software Foundation; version 2.1.
+#
+# This library is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License along
+# with this library; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 # Automatically generates KCIDB issues and incidents from logspec error
 # specifications
