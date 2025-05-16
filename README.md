@@ -32,7 +32,7 @@ The system consists of several interconnected components:
 
 ### Prerequisites
 
-- Docker and Docker Compose
+Docker and Docker Compose (the newer `docker compose` plugin, not the legacy `docker-compose`; version 2.0+ required)
 - Git
 
 ### Clone the Repository
@@ -49,9 +49,9 @@ Create a `.env` file in the root directory with the following environment variab
 ```
 # PostgreSQL configuration
 POSTGRES_USER=kcidb
-POSTGRES_PASSWORD=your_password
+POSTGRES_PASSWORD=kcidb
 POSTGRES_DB=kcidb
-PG_DSN=postgresql://kcidb:your_password@db:5432/kcidb
+PG_URI=postgresql:dbname=kcidb user=kcidb_editor password=kcidb host=db port=5432
 
 # JWT authentication
 JWT_SECRET=your_jwt_secret
