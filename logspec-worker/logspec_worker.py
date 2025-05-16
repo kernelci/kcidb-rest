@@ -38,10 +38,51 @@ from logspec_api import generate_issues_and_incidents
 import kcidb
 import argparse
 import time
+import yaml
 
 APP_STATE_DIR = "/app/state"
 TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
 BUILDS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_builds.db")
+
+
+class LogspecState:
+    """
+    Class to manage the state of the logspec
+    """
+
+    def __init__(self):
+        self.config_file = None
+        self._cfg = None
+
+    def load_config(self, config_file):
+        """
+        Load the logspec configuration
+        """
+        self.config_file = config_file
+        if not os.path.exists(self.config_file):
+            print(f"Config file {self.config_file} does not exist")
+            # on early stage we make it backward compatible with
+            # instances without config file
+            print("WARNING: No config file found, using default values")
+            self._cfg = {}
+            return
+        
+        try:
+            with open(self.config_file, "r") as f:
+                self._cfg = yaml.safe_load(f)
+        except Exception as e:
+            print(f"Error loading config file {self.config_file}: {e}")
+            sys.exit(1)
+
+    def is_processable(self, node, kind):
+        """
+        Check if the node is processable
+        """
+        # for now stub, just return True
+        return True
+
+
+STATE = LogspecState()
 
 
 def set_test_processed(cursor, test_id):
@@ -268,6 +309,12 @@ def process_tests(cursor, args):
         return
     # print the unprocessed tests
     for test in unprocessed_tests:
+        if not STATE.is_processable(test, "test"):
+            print(f"Test {test['id']} is not processable")
+            if not args.dry_run:
+                set_test_processed(cursor, test["id"])
+            continue
+
         # print formatted column names and values
         for column, value in test.items():
             print(f"{column}: {value}")
@@ -308,6 +355,11 @@ def process_builds(cursor, args):
         print("No unprocessed builds found")
         return
     for build in unprocessed_builds:
+        if not STATE.is_processable(build, "build"):
+            print(f"Build {build['id']} is not processable")
+            if not args.dry_run:
+                set_build_processed(cursor, build["id"])
+            continue
         # print formatted column names and values
         for column, value in build.items():
             print(f"{column}: {value}")
@@ -358,7 +410,14 @@ def main():
         "--origins", nargs="+", required=True, help="origins to process"
     )
     parser.add_argument("--dry-run", action="store_true", help="dry run")
+    parser.add_argument(
+        "--config-file",
+        type=str,
+        default="logspec_worker.yaml",
+        help="logspec config file",
+    )
     args = parser.parse_args()
+    STATE.load_config(args.config_file)
     spool_dir = args.spool_dir
     if args.dry_run:
         print("Running in dry run mode, not submitting to kcidb")

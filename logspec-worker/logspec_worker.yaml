@@ -1,0 +1,30 @@
+# logspec filter configuration file
+# Comment lines (like this one) are ignored by the parser.
+#
+# This file is used to filter builds and tests to be processed by the
+# logspec worker.
+# 
+# The file is divided into sections, each section name is the name of
+# origin(organization sending reports) and the section contains a list of
+# filters to be applied to the reports from that origin.
+# Each filter is a dictionary with the
+# following keys:
+#   - type: the type of report, can be "builds" or "tests"
+#   - include_path: a list of test paths to include, if not present none
+#     are included. Usually path is TEST_SUITE_NAME.TEST_NAME.SUBTEST_NAME.etc
+
+collabora:
+  - type: builds
+  - type: tests
+    include_path:
+      - boot*
+
+microsoft:
+  - type: builds
+
+# redhat:
+#   - type: builds
+#   - type: tests
+#     include_path:
+#       - boot*
+#       - ltp.*        
