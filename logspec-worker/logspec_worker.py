@@ -276,8 +276,9 @@ def process_tests(cursor, args):
             continue
         # Process the test
         print(f"Processing test {test['id']}")
-        # Call logspec
-        res_nodes, new_status = logspec_process_node(test, "test")
+        # Call logspec, we assume all tests are of type "boot"
+        # TODO: We need different types of parsers for different tests
+        res_nodes, new_status = logspec_process_node(test, "boot")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             if not args.dry_run:
                 # submit to kcidb incident and issue

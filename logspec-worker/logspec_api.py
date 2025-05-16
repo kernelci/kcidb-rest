@@ -204,6 +204,10 @@ def generate_issues_and_incidents(result_id, log_file, test_type, origin):
     }
 
     """Generate issues and incidents"""
+    # validate test_type exists, so we don't have exceptions
+    if test_type not in test_types:
+        return parsed_data, None
+
     start_state = logspec.main.load_parser(test_types[test_type]['parser'])
     parser = test_types[test_type]['parser']
     error_list, new_status = process_log(log_file, parser, start_state)
