@@ -43,6 +43,7 @@ APP_STATE_DIR = "/app/state"
 TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
 BUILDS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_builds.db")
 
+
 def set_test_processed(cursor, test_id):
     """
     Mark the test as processed in the shelve database
@@ -346,13 +347,16 @@ def verify_appstate():
         with shelve.open(BUILDS_STATE_DB) as db:
             db["processed_builds"] = {}
 
+
 def main():
     """
     Main function to process the logspec
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
-    parser.add_argument("--origins", nargs='+', required=True, help="origins to process")
+    parser.add_argument(
+        "--origins", nargs="+", required=True, help="origins to process"
+    )
     parser.add_argument("--dry-run", action="store_true", help="dry run")
     args = parser.parse_args()
     spool_dir = args.spool_dir
