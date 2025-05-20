@@ -39,6 +39,7 @@ import kcidb
 import argparse
 import time
 import yaml
+import fnmatch
 
 APP_STATE_DIR = "/app/state"
 TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
@@ -53,6 +54,8 @@ class LogspecState:
     def __init__(self):
         self.config_file = None
         self._cfg = None
+        self._spool_dir = None
+        self.dry_run = False
 
     def load_config(self, config_file):
         """
@@ -74,15 +77,67 @@ class LogspecState:
             print(f"Error loading config file {self.config_file}: {e}")
             sys.exit(1)
 
-    def is_processable(self, node, kind):
+    def validate_path(self, path, include_path):
+        """
+        Validate the path against the include_path
+        """
+        # compare path with include_path (include_path might have wildcards like *)
+        # fnmatch is closest to shell wildcard matching
+        if fnmatch.fnmatch(path, include_path):
+            return True
+        return False
+
+    def is_processable(self, node, type):
         """
         Check if the node is processable
         """
-        # for now stub, just return True
-        return True
+        node_origin = node["origin"]
+        if node_origin not in self._cfg:
+            print(f"Origin {node_origin} not found in config file")
+            return False
+        # iterate over origin in config file
+        for entry in self._cfg[node_origin]:
+            if entry["type"] == type:
+                if 'include_path' in entry:
+                    if self.validate_path(node["path"], entry["include_path"]):
+                        return True
+                    return False
+                return True
+        return False
+
+    def get_origins(self):
+        """
+        Get the origins from the config file
+        """
+        if self._cfg is None:
+            print("Config file not loaded")
+            return []
+        # first level keys is the origins
+        origins = []
+        for key in self._cfg.keys():
+            origins.append(key)
+        return origins
+
+    def set_spool_dir(self, spool_dir):
+        """
+        Set the spool directory
+        """
+        self._spool_dir = spool_dir
+        if not os.path.exists(self._spool_dir):
+            os.makedirs(self._spool_dir)
+            print(f"Spool directory {self._spool_dir} created")
+        return self._spool_dir
+
+    def get_spool_dir(self):
+        """
+        Get the spool directory
+        """
+        if self._spool_dir is None:
+            print("Spool directory not set")
+            return None
+        return self._spool_dir
 
 
-STATE = LogspecState()
 
 
 def set_test_processed(cursor, test_id):
@@ -296,12 +351,12 @@ def submit_to_kcidb(issues, incidents, spool_dir):
     )
 
 
-def process_tests(cursor, args):
+def process_tests(cursor, state):
     """
     Process the tests
     """
-    spool_dir = args.spool_dir
-    origins = args.origins
+    spool_dir = state.get_spool_dir()
+    origins = state.get_origins()
     # code to get unprocessed tests
     unprocessed_tests = get_unprocessed_tests(cursor, origins)
     if not unprocessed_tests:
@@ -309,9 +364,9 @@ def process_tests(cursor, args):
         return
     # print the unprocessed tests
     for test in unprocessed_tests:
-        if not STATE.is_processable(test, "test"):
+        if not state.is_processable(test, "test"):
             print(f"Test {test['id']} is not processable")
-            if not args.dry_run:
+            if not state.dry_run:
                 set_test_processed(cursor, test["id"])
             continue
 
@@ -328,7 +383,7 @@ def process_tests(cursor, args):
         # TODO: We need different types of parsers for different tests
         res_nodes, new_status = logspec_process_node(test, "boot")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
-            if not args.dry_run:
+            if not state.dry_run:
                 # submit to kcidb incident and issue
                 print(f"Submitting to kcidb")
                 submit_to_kcidb(
@@ -339,25 +394,25 @@ def process_tests(cursor, args):
                 print(json.dumps(res_nodes, indent=4))
 
         # mark the test as processed (TODO: must be in database)
-        if not args.dry_run:
+        if not state.dry_run:
             set_test_processed(cursor, test["id"])
 
 
-def process_builds(cursor, args):
+def process_builds(cursor, state):
     """
     Process the builds
     """
-    spool_dir = args.spool_dir
-    origins = args.origins
+    spool_dir = state.get_spool_dir()
+    origins = state.get_origins()
     # get unprocessed builds
     unprocessed_builds = get_unprocessed_builds(cursor, origins)
     if not unprocessed_builds:
         print("No unprocessed builds found")
         return
     for build in unprocessed_builds:
-        if not STATE.is_processable(build, "build"):
+        if not state.is_processable(build, "build"):
             print(f"Build {build['id']} is not processable")
-            if not args.dry_run:
+            if not state.dry_run:
                 set_build_processed(cursor, build["id"])
             continue
         # print formatted column names and values
@@ -373,7 +428,7 @@ def process_builds(cursor, args):
         res_nodes, new_status = logspec_process_node(build, "build")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             # submit to kcidb incident and issue
-            if not args.dry_run:
+            if not state.dry_run:
                 print(f"Submitting to kcidb")
                 submit_to_kcidb(
                     res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
@@ -382,7 +437,7 @@ def process_builds(cursor, args):
                 print("Dry run - not submitting builds to kcidb, just printing")
                 print(json.dumps(res_nodes, indent=4))
         # mark the build as processed (TODO: must be in database)
-        if not args.dry_run:
+        if not state.dry_run:
             set_build_processed(cursor, build["id"])
 
 
@@ -404,11 +459,9 @@ def main():
     """
     Main function to process the logspec
     """
+    state = LogspecState()
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
-    parser.add_argument(
-        "--origins", nargs="+", required=True, help="origins to process"
-    )
     parser.add_argument("--dry-run", action="store_true", help="dry run")
     parser.add_argument(
         "--config-file",
@@ -417,16 +470,13 @@ def main():
         help="logspec config file",
     )
     args = parser.parse_args()
-    STATE.load_config(args.config_file)
-    spool_dir = args.spool_dir
+    state.load_config(args.config_file)
+    state.set_spool_dir(args.spool_dir)
     if args.dry_run:
         print("Running in dry run mode, not submitting to kcidb")
         print("WARNING: Dry run will not set internal state as processed")
         print("To avoid expensive reprocessing, it will process only once")
-    # check if spool_dir exists
-    if not os.path.exists(spool_dir):
-        print(f"Spool directory {spool_dir} does not exist")
-        sys.exit(1)
+        state.dry_run = True
     # verify if cache directory exists
     if not os.path.exists("/cache"):
         os.makedirs("/cache")
@@ -437,9 +487,10 @@ def main():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+
     while True:
-        process_builds(cursor, args)
-        process_tests(cursor, args)
+        process_builds(cursor, state)
+        process_tests(cursor, state)
         # sleep 60 seconds
         if args.dry_run:
             print("Dry run - sleeping 6 hours")
