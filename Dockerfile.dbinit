@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y postgresql-client git curl postgresql-s
 RUN pip3 install --no-cache-dir git+https://github.com/kernelci/kcidb.git
 
 
-COPY dbinit/dbinit.sh /app/dbinit.sh
+COPY scripts/dbinit.sh /app/dbinit.sh
 
 RUN chmod +x /app/dbinit.sh
 
