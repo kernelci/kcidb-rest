@@ -20,4 +20,11 @@ else
   echo "JWT_SECRET already set in .env"
 fi
 
+# Remove CERTBOT_DOMAIN from .env if it exists
+if grep -q "CERTBOT_DOMAIN=" .env; then
+  echo "Removing CERTBOT_DOMAIN from .env..."
+  sed -i '/CERTBOT_DOMAIN=/d' .env
+  echo "CERTBOT_DOMAIN removed from .env"
+fi
+
 sudo docker compose --profile=self-hosted up -d --build
