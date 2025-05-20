@@ -103,7 +103,13 @@ def ingest_submissions(spool_dir, db_client=None):
 def verify_dir(dir):
     if not os.path.exists(dir):
         print(f"Directory {dir} does not exist")
-        raise Exception(f"Directory {dir} does not exist")
+        # try to create it
+        try:
+            os.makedirs(dir)
+            print(f"Directory {dir} created")
+        except Exception as e:
+            print(f"Error creating directory {dir}: {e}")
+            raise e
     if not os.path.isdir(dir):
         raise Exception(f"Directory {dir} is not a directory")
     if not os.access(dir, os.W_OK):
