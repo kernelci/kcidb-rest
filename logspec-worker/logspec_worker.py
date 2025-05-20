@@ -40,10 +40,13 @@ import argparse
 import time
 import yaml
 import fnmatch
+import time
+import logging
 
 APP_STATE_DIR = "/app/state"
 TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
 BUILDS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_builds.db")
+logging.basicConfig(level=logging.INFO)
 
 
 class LogspecState:
@@ -459,6 +462,8 @@ def main():
     """
     Main function to process the logspec
     """
+    # sleep 1 second
+    logging.info("Starting logspec worker")
     state = LogspecState()
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
@@ -473,9 +478,9 @@ def main():
     state.load_config(args.config_file)
     state.set_spool_dir(args.spool_dir)
     if args.dry_run:
-        print("Running in dry run mode, not submitting to kcidb")
-        print("WARNING: Dry run will not set internal state as processed")
-        print("To avoid expensive reprocessing, it will process only once")
+        logging.warning("Running in dry run mode, not submitting to kcidb")
+        logging.warning("WARNING: Dry run will not set internal state as processed")
+        logging.warning("To avoid expensive reprocessing, it will process only once")
         state.dry_run = True
     # verify if cache directory exists
     if not os.path.exists("/cache"):
@@ -487,13 +492,13 @@ def main():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-
+    logging.info("Connected to database, starting processing")
     while True:
         process_builds(cursor, state)
         process_tests(cursor, state)
         # sleep 60 seconds
         if args.dry_run:
-            print("Dry run - sleeping 6 hours")
+            logging.warning("Dry run - sleeping 6 hours")
             time.sleep(6 * 60 * 60)
         time.sleep(60)
 

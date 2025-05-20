@@ -36,7 +36,7 @@ services:
       - ./spool:/app/spool
       - ./cache:/cache
       - ./state:/app/state
-    command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool", "--origins", "microsoft", "--dry-run"]
+    command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool", "--dry-run"]
     restart: unless-stopped
   postgres:
     container_name: 'postgres'
