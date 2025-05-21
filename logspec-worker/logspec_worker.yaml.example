@@ -14,13 +14,13 @@
 #     are included. Usually path is TEST_SUITE_NAME.TEST_NAME.SUBTEST_NAME.etc
 
 collabora:
-  - type: builds
-  - type: tests
+  - type: build
+  - type: test
     include_path:
       - boot*
 
 microsoft:
-  - type: builds
+  - type: build
 
 # redhat:
 #   - type: builds

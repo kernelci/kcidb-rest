@@ -47,7 +47,7 @@ APP_STATE_DIR = "/app/state"
 TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
 BUILDS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_builds.db")
 logging.basicConfig(level=logging.INFO)
-
+PROCESS_DAYS = 1
 
 class LogspecState:
     """
@@ -86,9 +86,20 @@ class LogspecState:
         """
         # compare path with include_path (include_path might have wildcards like *)
         # fnmatch is closest to shell wildcard matching
-        if fnmatch.fnmatch(path, include_path):
-            return True
-        return False
+        #logging.info(f"Validating path {path} against {include_path}")
+        # if include_path is string, convert it to list
+        if isinstance(include_path, str):
+            include_path = [include_path]
+        # if include_path is list, iterate over it
+        if isinstance(include_path, list):
+            for path_element in include_path:
+                if fnmatch.fnmatch(path, path_element):
+                    return True
+            return False
+        else:
+            logging.error(f"include_path {include_path} is not a string or list")
+            sys.exit(1)
+
 
     def is_processable(self, node, type):
         """
@@ -96,7 +107,7 @@ class LogspecState:
         """
         node_origin = node["origin"]
         if node_origin not in self._cfg:
-            logging.warning(f"Origin {node_origin} not found in config file")
+            logging.warning(f"Origin {node_origin} not found in config file: {self._cfg}")
             return False
         # iterate over origin in config file
         for entry in self._cfg[node_origin]:
@@ -229,16 +240,16 @@ def get_unprocessed_tests(cursor, origins):
     """
     Get unprocessed tests from the database
     """
-    # last 24h
-    last_24h = datetime.datetime.now() - datetime.timedelta(days=1)
+    duration = datetime.datetime.now() - datetime.timedelta(days=PROCESS_DAYS)
     #
     try:
         query = (
             "SELECT * FROM tests WHERE _timestamp > %s AND log_url IS NOT NULL"
             " AND status != 'PASS' AND origin = ANY(%s)"
         )
-        cursor.execute(query, (last_24h, origins))
+        cursor.execute(query, (duration, origins))
         tests = cursor.fetchall()
+        #logging.info(f"SQL {query} get_unprocessed_tests: {tests} origins: {origins}")
         return tests
     except Exception as e:
         logging.error(f"Error fetching unprocessed tests: {e}")
@@ -249,16 +260,16 @@ def get_unprocessed_builds(cursor, origins):
     """
     Get unprocessed builds from the database
     """
-    # last 24h
-    last_24h = datetime.datetime.now() - datetime.timedelta(days=1)
+    duration = datetime.datetime.now() - datetime.timedelta(days=PROCESS_DAYS)
     #
     try:
         query = (
             "SELECT * FROM builds WHERE _timestamp > %s AND log_url IS NOT NULL"
             " AND status != 'PASS' AND origin = ANY(%s)"
         )
-        cursor.execute(query, (last_24h, origins))
+        cursor.execute(query, (duration, origins))
         builds = cursor.fetchall()
+        #logging.info(f"SQL {query} get_unprocessed_builds: {builds} origins: {origins}")
         return builds
     except Exception as e:
         logging.error(f"Error fetching unprocessed builds: {e}")
@@ -368,7 +379,7 @@ def process_tests(cursor, state):
     # print the unprocessed tests
     for test in unprocessed_tests:
         if not state.is_processable(test, "test"):
-            logging.info(f"Test {test['id']} is not processable")
+            logging.info(f"Test {test['id']} with path {test['path']} is not processable")
             if not state.dry_run:
                 set_test_processed(cursor, test["id"])
             continue
