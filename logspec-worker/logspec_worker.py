@@ -47,7 +47,7 @@ APP_STATE_DIR = "/app/state"
 TESTS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_tests.db")
 BUILDS_STATE_DB = os.path.join(APP_STATE_DIR, "processed_builds.db")
 logging.basicConfig(level=logging.INFO)
-
+PROCESS_DAYS = 1
 
 class LogspecState:
     """
@@ -66,10 +66,10 @@ class LogspecState:
         """
         self.config_file = config_file
         if not os.path.exists(self.config_file):
-            print(f"Config file {self.config_file} does not exist")
+            logging.warning(f"Config file {self.config_file} does not exist")
             # on early stage we make it backward compatible with
             # instances without config file
-            print("WARNING: No config file found, using default values")
+            logging.warning("No config file found, using default values")
             self._cfg = {}
             return
         
@@ -77,7 +77,7 @@ class LogspecState:
             with open(self.config_file, "r") as f:
                 self._cfg = yaml.safe_load(f)
         except Exception as e:
-            print(f"Error loading config file {self.config_file}: {e}")
+            logging.error(f"Error loading config file {self.config_file}: {e}")
             sys.exit(1)
 
     def validate_path(self, path, include_path):
@@ -86,9 +86,20 @@ class LogspecState:
         """
         # compare path with include_path (include_path might have wildcards like *)
         # fnmatch is closest to shell wildcard matching
-        if fnmatch.fnmatch(path, include_path):
-            return True
-        return False
+        #logging.info(f"Validating path {path} against {include_path}")
+        # if include_path is string, convert it to list
+        if isinstance(include_path, str):
+            include_path = [include_path]
+        # if include_path is list, iterate over it
+        if isinstance(include_path, list):
+            for path_element in include_path:
+                if fnmatch.fnmatch(path, path_element):
+                    return True
+            return False
+        else:
+            logging.error(f"include_path {include_path} is not a string or list")
+            sys.exit(1)
+
 
     def is_processable(self, node, type):
         """
@@ -96,7 +107,7 @@ class LogspecState:
         """
         node_origin = node["origin"]
         if node_origin not in self._cfg:
-            print(f"Origin {node_origin} not found in config file")
+            logging.warning(f"Origin {node_origin} not found in config file: {self._cfg}")
             return False
         # iterate over origin in config file
         for entry in self._cfg[node_origin]:
@@ -113,7 +124,7 @@ class LogspecState:
         Get the origins from the config file
         """
         if self._cfg is None:
-            print("Config file not loaded")
+            logging.warning("Config file not loaded")
             return []
         # first level keys is the origins
         origins = []
@@ -128,7 +139,7 @@ class LogspecState:
         self._spool_dir = spool_dir
         if not os.path.exists(self._spool_dir):
             os.makedirs(self._spool_dir)
-            print(f"Spool directory {self._spool_dir} created")
+            logging.info(f"Spool directory {self._spool_dir} created")
         return self._spool_dir
 
     def get_spool_dir(self):
@@ -136,7 +147,7 @@ class LogspecState:
         Get the spool directory
         """
         if self._spool_dir is None:
-            print("Spool directory not set")
+            logging.warning("Spool directory not set")
             return None
         return self._spool_dir
 
@@ -151,9 +162,9 @@ def set_test_processed(cursor, test_id):
     with shelve.open(TESTS_STATE_DB) as db:
         if test_id not in db:
             db[test_id] = True
-            print(f"Test {test_id} marked as processed")
+            logging.info(f"Test {test_id} marked as processed")
         else:
-            print(f"Test {test_id} already processed")
+            logging.info(f"Test {test_id} already processed")
 
 
 def is_test_processed(test_id):
@@ -175,9 +186,9 @@ def set_build_processed(cursor, build_id):
     with shelve.open(BUILDS_STATE_DB) as db:
         if build_id not in db:
             db[build_id] = True
-            print(f"Build {build_id} marked as processed")
+            logging.info(f"Build {build_id} marked as processed")
         else:
-            print(f"Build {build_id} already processed")
+            logging.info(f"Build {build_id} already processed")
 
 
 def is_build_processed(build_id):
@@ -207,7 +218,7 @@ def get_db_connection():
     if pg_dsn is None:
         pg_dsn = os.environ.get("PG_DSN")
         if pg_dsn is None:
-            print(
+            logging.error(
                 "No database connection string found. Please set the PG_DSN environment variable or create a .pg_dsn file."
             )
             sys.exit(1)
@@ -218,10 +229,10 @@ def get_db_connection():
 
     try:
         conn = psycopg2.connect(dsn=pg_dsn, cursor_factory=DictCursor)
-        print("Connected to database")
+        logging.info("Connected to database")
         return conn
     except Exception as e:
-        print(f"Error connecting to database: {e}")
+        logging.error(f"Error connecting to database: {e}")
         sys.exit(1)
 
 
@@ -229,19 +240,19 @@ def get_unprocessed_tests(cursor, origins):
     """
     Get unprocessed tests from the database
     """
-    # last 24h
-    last_24h = datetime.datetime.now() - datetime.timedelta(days=1)
+    duration = datetime.datetime.now() - datetime.timedelta(days=PROCESS_DAYS)
     #
     try:
         query = (
             "SELECT * FROM tests WHERE _timestamp > %s AND log_url IS NOT NULL"
             " AND status != 'PASS' AND origin = ANY(%s)"
         )
-        cursor.execute(query, (last_24h, origins))
+        cursor.execute(query, (duration, origins))
         tests = cursor.fetchall()
+        #logging.info(f"SQL {query} get_unprocessed_tests: {tests} origins: {origins}")
         return tests
     except Exception as e:
-        print(f"Error fetching unprocessed tests: {e}")
+        logging.error(f"Error fetching unprocessed tests: {e}")
         raise e
 
 
@@ -249,19 +260,19 @@ def get_unprocessed_builds(cursor, origins):
     """
     Get unprocessed builds from the database
     """
-    # last 24h
-    last_24h = datetime.datetime.now() - datetime.timedelta(days=1)
+    duration = datetime.datetime.now() - datetime.timedelta(days=PROCESS_DAYS)
     #
     try:
         query = (
             "SELECT * FROM builds WHERE _timestamp > %s AND log_url IS NOT NULL"
             " AND status != 'PASS' AND origin = ANY(%s)"
         )
-        cursor.execute(query, (last_24h, origins))
+        cursor.execute(query, (duration, origins))
         builds = cursor.fetchall()
+        #logging.info(f"SQL {query} get_unprocessed_builds: {builds} origins: {origins}")
         return builds
     except Exception as e:
-        print(f"Error fetching unprocessed builds: {e}")
+        logging.error(f"Error fetching unprocessed builds: {e}")
         return []
 
 
@@ -279,7 +290,7 @@ def fetch_log_id(log_url):
             # save log to cache
             with open(cache_file, "wb") as f:
                 f.write(response.content)
-            print(f"Log {log_id} fetched and saved to cache")
+            logging.info(f"Log {log_id} fetched and saved to cache")
             # decompress log if gzipped
             if log_url.endswith(".gz"):
                 # rename to .gz
@@ -290,10 +301,10 @@ def fetch_log_id(log_url):
                 os.remove(cache_file + ".gz")
             return log_id
         else:
-            print(f"Error fetching log {log_url}: {response.status_code}")
+            logging.error(f"Error fetching log {log_url}: {response.status_code}")
             return None
     except Exception as e:
-        print(f"Error fetching log {log_url}: {e}")
+        logging.error(f"Error fetching log {log_url}: {e}")
         return None
 
 
@@ -304,10 +315,10 @@ def logspec_process_node(node, kind):
     """
     log_url = node["log_url"]
     log_id = fetch_log_id(log_url)
-    print(f"Log ID: {log_id}")
+    logging.info(f"Log ID: {log_id}")
     # check if log_id is None
     if log_id is None:
-        print(f"Error fetching log {log_url}")
+        logging.error(f"Error fetching log {log_url}")
         return
     log_file = os.path.join("/cache", log_id)
     return generate_issues_and_incidents(node["id"], log_file, kind, node["origin"])
@@ -363,38 +374,38 @@ def process_tests(cursor, state):
     # code to get unprocessed tests
     unprocessed_tests = get_unprocessed_tests(cursor, origins)
     if not unprocessed_tests:
-        print("No unprocessed tests found")
+        logging.info("No unprocessed tests found")
         return
     # print the unprocessed tests
     for test in unprocessed_tests:
         if not state.is_processable(test, "test"):
-            print(f"Test {test['id']} is not processable")
+            logging.info(f"Test {test['id']} with path {test['path']} is not processable")
             if not state.dry_run:
                 set_test_processed(cursor, test["id"])
             continue
 
         # print formatted column names and values
         for column, value in test.items():
-            print(f"{column}: {value}")
+            logging.info(f"{column}: {value}")
         # Check if the test is already processed
         if is_test_processed(test["id"]):
-            print(f"Test {test['id']} already processed")
+            logging.info(f"Test {test['id']} already processed")
             continue
         # Process the test
-        print(f"Processing test {test['id']}")
+        logging.info(f"Processing test {test['id']}")
         # Call logspec, we assume all tests are of type "boot"
         # TODO: We need different types of parsers for different tests
         res_nodes, new_status = logspec_process_node(test, "boot")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             if not state.dry_run:
                 # submit to kcidb incident and issue
-                print(f"Submitting to kcidb")
+                logging.info(f"Submitting to kcidb")
                 submit_to_kcidb(
                     res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
                 )
             else:
-                print("Dry run - not submitting tests to kcidb, just printing")
-                print(json.dumps(res_nodes, indent=4))
+                logging.info("Dry run - not submitting tests to kcidb, just printing")
+                logging.info(json.dumps(res_nodes, indent=4))
 
         # mark the test as processed (TODO: must be in database)
         if not state.dry_run:
@@ -410,35 +421,35 @@ def process_builds(cursor, state):
     # get unprocessed builds
     unprocessed_builds = get_unprocessed_builds(cursor, origins)
     if not unprocessed_builds:
-        print("No unprocessed builds found")
+        logging.info("No unprocessed builds found")
         return
     for build in unprocessed_builds:
         if not state.is_processable(build, "build"):
-            print(f"Build {build['id']} is not processable")
+            logging.info(f"Build {build['id']} is not processable")
             if not state.dry_run:
                 set_build_processed(cursor, build["id"])
             continue
         # print formatted column names and values
         for column, value in build.items():
-            print(f"{column}: {value}")
+            logging.info(f"{column}: {value}")
         # Check if the build is already processed
         if is_build_processed(build["id"]):
-            print(f"Build {build['id']} already processed")
+            logging.info(f"Build {build['id']} already processed")
             continue
         # Process the build
-        print(f"Processing build {build['id']}")
+        logging.info(f"Processing build {build['id']}")
         # Call logspec
         res_nodes, new_status = logspec_process_node(build, "build")
         if res_nodes["issue_node"] or res_nodes["incident_node"]:
             # submit to kcidb incident and issue
             if not state.dry_run:
-                print(f"Submitting to kcidb")
+                logging.info(f"Submitting to kcidb")
                 submit_to_kcidb(
                     res_nodes["issue_node"], res_nodes["incident_node"], spool_dir
                 )
             else:
-                print("Dry run - not submitting builds to kcidb, just printing")
-                print(json.dumps(res_nodes, indent=4))
+                logging.info("Dry run - not submitting builds to kcidb, just printing")
+                logging.info(json.dumps(res_nodes, indent=4))
         # mark the build as processed (TODO: must be in database)
         if not state.dry_run:
             set_build_processed(cursor, build["id"])
@@ -471,7 +482,7 @@ def main():
     parser.add_argument(
         "--config-file",
         type=str,
-        default="logspec_worker.yaml",
+        default="config/logspec_worker.yaml",
         help="logspec config file",
     )
     args = parser.parse_args()

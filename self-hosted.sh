@@ -28,3 +28,9 @@ if grep -q "CERTBOT_DOMAIN=" .env; then
 fi
 
 sudo docker compose --profile=self-hosted up -d --build
+# is config/logspec_worker.yaml exists?
+if [ ! -f config/logspec_worker.yaml ]; then
+    echo "logspec_worker.yaml not found, copying example"
+    cp logspec-worker/logspec_worker.yaml.example config/logspec_worker.yaml
+fi
+
