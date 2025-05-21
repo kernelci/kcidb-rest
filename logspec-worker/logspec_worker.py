@@ -471,7 +471,7 @@ def main():
     parser.add_argument(
         "--config-file",
         type=str,
-        default="logspec_worker.yaml",
+        default="config/logspec_worker.yaml",
         help="logspec config file",
     )
     args = parser.parse_args()

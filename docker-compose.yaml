@@ -36,6 +36,7 @@ services:
       - ./spool:/app/spool
       - ./cache:/cache
       - ./state:/app/state
+      - ./config:/app/config
     command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool", "--dry-run"]
     restart: unless-stopped
   postgres:
