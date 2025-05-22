@@ -26,50 +26,60 @@ KCIDB-Rust REST submissions receiver
 
 */
 
-use axum::Router;
-use axum::extract::State;
-use axum::http::StatusCode;
-use axum::http::header::HeaderMap;
-use axum::response::IntoResponse;
-use axum::routing::{get, post};
-use axum_server::tls_rustls::RustlsConfig;
-use clap::Parser;
-use jsonwebtoken::{DecodingKey, Validation, decode};
-use rand::Rng;
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+
+use axum::{
+    extract::State,
+    http::{header::HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
+};
+use axum_server::tls_rustls::RustlsConfig;
+use clap::Parser;
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::limit::RequestBodyLimitLayer;
 
+/// Command-line arguments for the application.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// The port to listen on
+    /// The port to listen on.
     #[clap(short, long, default_value = "443")]
     port: u16,
-    /// The host to listen on
+    /// The host to listen on.
     #[clap(short = 'b', long, default_value = "0.0.0.0")]
     host: String,
-    /// The path to the directory to store the received files
+    /// The path to the directory to store the received files.
     #[clap(short = 'd', long, default_value = "/app/spool")]
     directory: String,
-    /// JWT secret
+    /// JWT secret for authentication.
     #[clap(short, long, default_value = "secret")]
     jwt_secret: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct SubmissionStatus {
-    id: String,
-    status: String,
-    message: Option<String>,
+/// Application state shared across handlers.
+struct AppState {
+    /// Directory where submissions are stored.
+    directory: String,
+    /// JWT secret for authentication.
+    jwt_secret: String,
 }
 
-struct AppState {
-    directory: String,
-    jwt_secret: String,
+/// Status response for a submission.
+#[derive(Debug, Serialize, Deserialize)]
+struct SubmissionStatus {
+    /// Submission ID.
+    id: String,
+    /// Status string (e.g., "ok", "error").
+    status: String,
+    /// Optional message with additional information.
+    message: Option<String>,
 }
 
 fn verify_submission_path(path: &str) -> bool {
@@ -329,10 +339,22 @@ struct JWT {
     gendate: String,
 }
 
-fn verify_jwt(token: &str, secret: &str) -> Result<JWT, jsonwebtoken::errors::Error> {
+fn verify_jwt(token: &str, secret: &str) -> Result<JWT, String> {
     let key = DecodingKey::from_secret(secret.as_bytes());
-    let token = decode::<JWT>(token, &key, &Validation::default())?;
-    Ok(token.claims)
+    match decode::<JWT>(token, &key, &Validation::default()) {
+        Ok(token_data) => Ok(token_data.claims),
+        Err(err) => {
+            let msg = match err.kind() {
+                jsonwebtoken::errors::ErrorKind::InvalidToken => "Invalid token".to_string(),
+                jsonwebtoken::errors::ErrorKind::InvalidSignature => "Invalid signature".to_string(),
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => "Token expired".to_string(),
+                jsonwebtoken::errors::ErrorKind::InvalidIssuer => "Invalid issuer".to_string(),
+                jsonwebtoken::errors::ErrorKind::InvalidAudience => "Invalid audience".to_string(),
+                _ => format!("JWT error: {}", err),
+            };
+            Err(msg)
+        }
+    }
 }
 
 /* STUB for now */
