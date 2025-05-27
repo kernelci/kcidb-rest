@@ -43,6 +43,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::limit::RequestBodyLimitLayer;
 
+
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
@@ -70,6 +71,8 @@ struct SubmissionStatus {
 struct AppState {
     directory: String,
     jwt_secret: String,
+    submission_counter: u64,
+    error_counter: u64,
 }
 
 fn verify_submission_path(path: &str) -> bool {
@@ -90,6 +93,28 @@ fn wait_for_file(path: &str) -> bool {
     false
 }
 
+
+
+
+async fn submission_metrics(
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    // Prometheus metrics format
+    // String to hold the metrics
+    let mut metrics = String::new();
+    metrics.push_str("# HELP kcdb_submissions_total Total number of submissions received\n");
+    metrics.push_str("# TYPE kcdb_submissions_total counter\n");
+    metrics.push_str(&format!(
+        "kcdb_submissions_total {}\n",
+        state.submission_counter
+    ));
+    metrics.push_str("# HELP kcdb_errors_total Total number of errors encountered\n");
+    metrics.push_str("# TYPE kcdb_errors_total counter\n");
+    metrics.push_str(&format!("kcdb_errors_total {}\n", state.error_counter));
+    (StatusCode::OK, metrics)
+}
+
 #[tokio::main]
 async fn main() {
     let limit_layer = RequestBodyLimitLayer::new(512 * 1024 * 1024);
@@ -98,6 +123,8 @@ async fn main() {
     let app_state = Arc::new(AppState {
         directory: args.directory,
         jwt_secret: jwt_secret,
+        submission_counter: 0,
+        error_counter: 0,
     });
     let tls_key: String;
     let tls_chain: String;
@@ -164,6 +191,7 @@ async fn main() {
         let app = Router::new()
             .route("/submit", post(receive_submission))
             .route("/status", get(submission_status))
+            .route("/metrics", get(submission_metrics))
             .with_state(app_state)
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
@@ -262,7 +290,7 @@ async fn submission_status(
 // Answer STATUS 200 if the submission is valid
 async fn receive_submission(
     headers: HeaderMap,
-    State(state): State<Arc<AppState>>,
+    State(mut state): State<Arc<AppState>>,
     body: String,
 ) -> impl IntoResponse {
     let auth_result = verify_auth(headers, state.clone());
@@ -276,6 +304,10 @@ async fn receive_submission(
                 message: Some(e),
             };
             let err_json = serde_json::to_string(&err_status).unwrap();
+            // lock, increment error counter
+            let shared_state = Arc::get_mut(&mut state).unwrap();
+            shared_state.error_counter += 1;
+
             return (StatusCode::UNAUTHORIZED, err_json);
         }
     }
@@ -307,6 +339,8 @@ async fn receive_submission(
                 message: Some(msg),
             };
             let jsonstr = serde_json::to_string(&status).unwrap();
+            let shared_state = Arc::get_mut(&mut state).unwrap();
+            shared_state.submission_counter += 1;
             println!("Submission status: {}", jsonstr);
             (StatusCode::OK, jsonstr)
         }
