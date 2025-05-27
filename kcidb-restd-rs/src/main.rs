@@ -68,11 +68,13 @@ struct SubmissionStatus {
     message: Option<String>,
 }
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 struct AppState {
     directory: String,
     jwt_secret: String,
-    submission_counter: u64,
-    error_counter: u64,
+    submission_counter: AtomicU64,
+    error_counter: AtomicU64,
 }
 
 fn verify_submission_path(path: &str) -> bool {
@@ -100,7 +102,6 @@ async fn submission_metrics(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // Calculate number of json files in the spool directory
     let spool_path = Path::new(&state.directory);
     let json_files_num = match spool_path.read_dir() {
         Ok(entries) => entries.filter_map(Result::ok).filter(|e| e.path().extension().map_or(false, |ext| ext == "json")).count(),
@@ -113,11 +114,14 @@ async fn submission_metrics(
     metrics.push_str("# TYPE kcdb_submissions_total counter\n");
     metrics.push_str(&format!(
         "kcdb_submissions_total {}\n",
-        state.submission_counter
+        state.submission_counter.load(Ordering::Relaxed)
     ));
     metrics.push_str("# HELP kcdb_errors_total Total number of errors encountered\n");
     metrics.push_str("# TYPE kcdb_errors_total counter\n");
-    metrics.push_str(&format!("kcdb_errors_total {}\n", state.error_counter));
+    metrics.push_str(&format!(
+        "kcdb_errors_total {}\n",
+        state.error_counter.load(Ordering::Relaxed)
+    ));
     // number of json files in the spool directory
     metrics.push_str("# HELP kcdb_json_files_total Total number of JSON files in the spool directory\n");
     metrics.push_str("# TYPE kcdb_json_files_total gauge\n");
@@ -137,8 +141,8 @@ async fn main() {
     let app_state = Arc::new(AppState {
         directory: args.directory,
         jwt_secret: jwt_secret,
-        submission_counter: 0,
-        error_counter: 0,
+        submission_counter: AtomicU64::new(0),
+        error_counter: AtomicU64::new(0),
     });
     let tls_key: String;
     let tls_chain: String;
@@ -304,7 +308,7 @@ async fn submission_status(
 // Answer STATUS 200 if the submission is valid
 async fn receive_submission(
     headers: HeaderMap,
-    State(mut state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     body: String,
 ) -> impl IntoResponse {
     let auth_result = verify_auth(headers, state.clone());
@@ -318,9 +322,8 @@ async fn receive_submission(
                 message: Some(e),
             };
             let err_json = serde_json::to_string(&err_status).unwrap();
-            // lock, increment error counter
-            let shared_state = Arc::get_mut(&mut state).unwrap();
-            shared_state.error_counter += 1;
+            // increment error counter atomically
+            state.error_counter.fetch_add(1, Ordering::Relaxed);
 
             return (StatusCode::UNAUTHORIZED, err_json);
         }
@@ -353,8 +356,8 @@ async fn receive_submission(
                 message: Some(msg),
             };
             let jsonstr = serde_json::to_string(&status).unwrap();
-            let shared_state = Arc::get_mut(&mut state).unwrap();
-            shared_state.submission_counter += 1;
+            // increment submission counter atomically
+            state.submission_counter.fetch_add(1, Ordering::Relaxed);
             println!("Submission status: {}", jsonstr);
             (StatusCode::OK, jsonstr)
         }
