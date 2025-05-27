@@ -37,12 +37,10 @@ use clap::Parser;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::limit::RequestBodyLimitLayer;
-
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -96,16 +94,15 @@ fn wait_for_file(path: &str) -> bool {
     false
 }
 
-
-
-
 async fn submission_metrics(
-    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let spool_path = Path::new(&state.directory);
     let json_files_num = match spool_path.read_dir() {
-        Ok(entries) => entries.filter_map(Result::ok).filter(|e| e.path().extension().map_or(false, |ext| ext == "json")).count(),
+        Ok(entries) => entries
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and( |ext| ext == "json"))
+            .count(),
         Err(_) => 0,
     };
     // Prometheus metrics format
@@ -117,12 +114,14 @@ async fn submission_metrics(
         "kcdb_submissions_total {}\n",
         state.submission_counter.load(Ordering::Relaxed)
     ));
-    metrics.push_str("# HELP kcdb_submission_size_total Total size of all submissions received in bytes\n");
+    metrics.push_str(
+        "# HELP kcdb_submission_size_total Total size of all submissions received in bytes\n",
+    );
     metrics.push_str("# TYPE kcdb_submission_size_total counter\n");
     metrics.push_str(&format!(
         "kcdb_submission_size_total {}\n",
         state.submission_size_total.load(Ordering::Relaxed)
-    ));    
+    ));
     metrics.push_str("# HELP kcdb_errors_total Total number of errors encountered\n");
     metrics.push_str("# TYPE kcdb_errors_total counter\n");
     metrics.push_str(&format!(
@@ -130,12 +129,11 @@ async fn submission_metrics(
         state.error_counter.load(Ordering::Relaxed)
     ));
     // number of json files in the spool directory
-    metrics.push_str("# HELP kcdb_json_files_total Total number of JSON files in the spool directory\n");
+    metrics.push_str(
+        "# HELP kcdb_json_files_total Total number of JSON files in the spool directory\n",
+    );
     metrics.push_str("# TYPE kcdb_json_files_total gauge\n");
-    metrics.push_str(&format!(
-        "kcdb_json_files_total {}\n",
-        json_files_num
-    ));
+    metrics.push_str(&format!("kcdb_json_files_total {}\n", json_files_num));
 
     (StatusCode::OK, metrics)
 }
@@ -147,7 +145,7 @@ async fn main() {
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| args.jwt_secret.clone());
     let app_state = Arc::new(AppState {
         directory: args.directory,
-        jwt_secret: jwt_secret,
+        jwt_secret,
         submission_counter: AtomicU64::new(0),
         submission_size_total: AtomicU64::new(0),
         error_counter: AtomicU64::new(0),
@@ -226,7 +224,7 @@ async fn main() {
             .await
             .unwrap();
         let address = format!("{}:{}", args.host, args.port);
-        let addr = SocketAddr::from(address.parse::<std::net::SocketAddr>().unwrap());
+        let addr = address.parse::<std::net::SocketAddr>().unwrap();
         axum_server::bind_rustls(addr, tls_config)
             .serve(app.into_make_service())
             .await
@@ -265,11 +263,10 @@ fn generate_answer(status: &str, id: &str, message: Option<String>) -> String {
     let status = SubmissionStatus {
         id: id.to_string(),
         status: status.to_string(),
-        message: message,
+        message,
     };
     // serialize to json
-    let jsonstr = serde_json::to_string(&status).unwrap();
-    jsonstr
+    serde_json::to_string(&status).unwrap().to_string()
 }
 
 /*
@@ -349,7 +346,7 @@ async fn receive_submission(
             // on completion, rename to submission.json
             std::fs::rename(
                 &submission_file,
-                &format!("{}/submission-{}.json", state.directory, submission_id),
+                format!("{}/submission-{}.json", state.directory, submission_id),
             )
             .unwrap();
             println!("Submission {} received", submission_id);
@@ -366,7 +363,9 @@ async fn receive_submission(
             let jsonstr = serde_json::to_string(&status).unwrap();
             // increment submission counter atomically
             state.submission_counter.fetch_add(1, Ordering::Relaxed);
-            state.submission_size_total.fetch_add(size as u64, Ordering::Relaxed);
+            state
+                .submission_size_total
+                .fetch_add(size as u64, Ordering::Relaxed);
             println!("Submission status: {}", jsonstr);
             (StatusCode::OK, jsonstr)
         }
