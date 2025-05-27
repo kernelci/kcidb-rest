@@ -74,6 +74,7 @@ struct AppState {
     directory: String,
     jwt_secret: String,
     submission_counter: AtomicU64,
+    submission_size_total: AtomicU64,
     error_counter: AtomicU64,
 }
 
@@ -116,6 +117,12 @@ async fn submission_metrics(
         "kcdb_submissions_total {}\n",
         state.submission_counter.load(Ordering::Relaxed)
     ));
+    metrics.push_str("# HELP kcdb_submission_size_total Total size of all submissions received in bytes\n");
+    metrics.push_str("# TYPE kcdb_submission_size_total counter\n");
+    metrics.push_str(&format!(
+        "kcdb_submission_size_total {}\n",
+        state.submission_size_total.load(Ordering::Relaxed)
+    ));    
     metrics.push_str("# HELP kcdb_errors_total Total number of errors encountered\n");
     metrics.push_str("# TYPE kcdb_errors_total counter\n");
     metrics.push_str(&format!(
@@ -142,6 +149,7 @@ async fn main() {
         directory: args.directory,
         jwt_secret: jwt_secret,
         submission_counter: AtomicU64::new(0),
+        submission_size_total: AtomicU64::new(0),
         error_counter: AtomicU64::new(0),
     });
     let tls_key: String;
@@ -358,6 +366,7 @@ async fn receive_submission(
             let jsonstr = serde_json::to_string(&status).unwrap();
             // increment submission counter atomically
             state.submission_counter.fetch_add(1, Ordering::Relaxed);
+            state.submission_size_total.fetch_add(size as u64, Ordering::Relaxed);
             println!("Submission status: {}", jsonstr);
             (StatusCode::OK, jsonstr)
         }
