@@ -100,6 +100,12 @@ async fn submission_metrics(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    // Calculate number of json files in the spool directory
+    let spool_path = Path::new(&state.directory);
+    let json_files_num = match spool_path.read_dir() {
+        Ok(entries) => entries.filter_map(Result::ok).filter(|e| e.path().extension().map_or(false, |ext| ext == "json")).count(),
+        Err(_) => 0,
+    };
     // Prometheus metrics format
     // String to hold the metrics
     let mut metrics = String::new();
@@ -112,6 +118,14 @@ async fn submission_metrics(
     metrics.push_str("# HELP kcdb_errors_total Total number of errors encountered\n");
     metrics.push_str("# TYPE kcdb_errors_total counter\n");
     metrics.push_str(&format!("kcdb_errors_total {}\n", state.error_counter));
+    // number of json files in the spool directory
+    metrics.push_str("# HELP kcdb_json_files_total Total number of JSON files in the spool directory\n");
+    metrics.push_str("# TYPE kcdb_json_files_total gauge\n");
+    metrics.push_str(&format!(
+        "kcdb_json_files_total {}\n",
+        json_files_num
+    ));
+
     (StatusCode::OK, metrics)
 }
 
