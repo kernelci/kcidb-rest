@@ -41,6 +41,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::limit::RequestBodyLimitLayer;
+use std::os::unix::process::CommandExt;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -138,10 +139,26 @@ async fn submission_metrics(
     (StatusCode::OK, metrics)
 }
 
+fn are_we_root() -> bool {
+    // Check if running as root (uid 0) without using unsafe
+    #[cfg(target_family = "unix")]
+    {
+        match nix::unistd::Uid::effective().is_root() {
+            true => true,
+            false => false,
+        }
+    }
+    #[cfg(not(target_family = "unix"))]
+    {
+        // On non-Unix platforms, always return false
+        false
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let limit_layer = RequestBodyLimitLayer::new(512 * 1024 * 1024);
-    let args = Args::parse();
+    let mut args = Args::parse();
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| args.jwt_secret.clone());
     let app_state = Arc::new(AppState {
         directory: args.directory,
@@ -193,15 +210,23 @@ async fn main() {
     if app_state.jwt_secret.is_empty() {
         eprintln!("Warning: JWT secret is empty, disabling authentication");
     }
+    // if we are not root, change if port < 1024 to 8080
+    if args.port < 1024 && !are_we_root() {
+        println!("Warning: Port {} is less than 1024, you dont have root, using 8080 instead", args.port);
+        args.port = 8080;
+    }
+
     println!(
         "Listening on {}:{}, submissions path: {}",
         args.host, args.port, app_state.directory
     );
+
     // plain http if tls_key is empty
     if tls_key.is_empty() {
         println!("Starting HTTP server");
         let app = Router::new()
             .route("/submit", post(receive_submission))
+            .route("/status", get(submission_status))
             .with_state(app_state)
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
