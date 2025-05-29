@@ -89,6 +89,20 @@ docker compose --profile=google-cloud-sql up -d --build
 
 Make sure to provide the appropriate credentials in your `.env` file.
 
+### Generating tokens
+
+If your kcidb-rest is installed in isolated environment, you can disable JWT authentication by commenting out the JWT command in `docker-compose.yaml`:
+
+```yaml
+#    command: ["/usr/local/bin/kcidb-restd-rs","-j",""]
+```
+
+If you want to use JWT authentication, you can generate a token using the following command:
+
+```bash
+kcidb-restd-rs/tools/jwt_rest.py --secret YOUR_SECRET --origin YOUR_ORIGIN
+```
+
 ### Sending Data to the API
 
 To submit data to the REST API:
@@ -151,7 +165,7 @@ Uncomment this line in docker-compose.yaml:
 
 ### Manual Log Processing
 
-To manually process a log file through logspec:
+To manually process a log file through logspec without submitting it to the database, you can run:
 
 ```bash
 docker exec -it logspec-worker python /app/logspec_worker.py --spool-dir /app/spool --origins microsoft --dry-run
