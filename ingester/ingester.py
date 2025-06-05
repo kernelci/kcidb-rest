@@ -31,9 +31,9 @@ def get_db_credentials():
     pg_uri = os.environ.get("PG_URI")
     if pg_uri:
         DATABASE = pg_uri
-    pgpass = os.environ.get("PG_PASS")
+    pgpass = os.environ.get("POSTGRES_PASSWORD")
     if not pgpass:
-        raise Exception("PG_PASS environment variable not set")
+        raise Exception("POSTGRES_PASSWORD environment variable not set")
     (pgpass_fd, pgpass_filename) = tempfile.mkstemp(suffix=".pgpass")
     with os.fdopen(pgpass_fd, mode="w", encoding="utf-8") as pgpass_file:
         pgpass_file.write(pgpass)
