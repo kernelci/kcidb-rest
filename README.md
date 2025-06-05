@@ -48,17 +48,11 @@ Create a `.env` file in the root directory with the following environment variab
 
 ```
 # PostgreSQL configuration
-POSTGRES_USER=kcidb
 POSTGRES_PASSWORD=kcidb
-POSTGRES_DB=kcidb
+PS_PASS=kcidb
 PG_URI=postgresql:dbname=kcidb user=kcidb_editor password=kcidb host=db port=5432
-
 # JWT authentication
 JWT_SECRET=your_jwt_secret
-
-# Optional: SSL/TLS certificates
-CERTBOT_DOMAIN=your.domain.com
-CERTBOT_EMAIL=your.email@example.com
 ```
 
 ## Usage
