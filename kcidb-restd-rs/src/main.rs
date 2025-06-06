@@ -47,7 +47,7 @@ use std::os::unix::process::CommandExt;
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// The port to listen on
-    #[clap(short, long, default_value = "443")]
+    #[clap(short, long, default_value = "0")]
     port: u16,
     /// The host to listen on
     #[clap(short = 'b', long, default_value = "0.0.0.0")]
@@ -155,6 +155,40 @@ fn are_we_root() -> bool {
     }
 }
 
+async fn handle_root() -> impl IntoResponse {
+    let html = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KCIDB Submission Server</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f8f9fa; color: #222; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 60px auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 32px; }
+        h1 { color: #0057b7; }
+        a { color: #0057b7; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .logo { width: 120px; margin-bottom: 24px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="https://kernelci.org/wp-content/uploads/sites/92/2019/10/kernelci-horizontal-color.svg" alt="KernelCI Logo" class="logo"/>
+        <h1>KCIDB Submission Server</h1>
+        <p>Welcome! This is the <b>KCIDB</b> (KernelCI Database) REST submission endpoint.</p>
+        <p>For more information about KernelCI and KCIDB, please visit <a href="https://kernelci.org/" target="_blank">kernelci.org</a>.</p>
+        <p>If you are looking to submit test results or interact with KCIDB, please refer to the <a href="https://docs.kernelci.org/kcidb/" target="_blank">KCIDB documentation</a>.</p>
+        <hr/>
+        <p style="font-size: 0.95em; color: #888;">&copy; 2025 KernelCI Project</p>
+    </div>
+</body>
+</html>"#;
+    (
+        StatusCode::OK,
+        axum::response::Html(html)
+    )
+}
+
 #[tokio::main]
 async fn main() {
     let limit_layer = RequestBodyLimitLayer::new(512 * 1024 * 1024);
@@ -210,27 +244,36 @@ async fn main() {
     if app_state.jwt_secret.is_empty() {
         eprintln!("Warning: JWT secret is empty, disabling authentication");
     }
+    let mut port = args.port;
+
     // if we are not root, change if port < 1024 to 8080
-    if args.port < 1024 && !are_we_root() {
+    if port < 1024 && !are_we_root() {
         println!("Warning: Port {} is less than 1024, you dont have root, using 8080 instead", args.port);
-        args.port = 8080;
+        port = 8080;
+    }
+
+    if tls_key.is_empty() && port == 0 {
+        port = 80;
+    } else if port == 0 {
+        port = 443;
     }
 
     println!(
         "Listening on {}:{}, submissions path: {}",
-        args.host, args.port, app_state.directory
+        args.host, port, app_state.directory
     );
 
     // plain http if tls_key is empty
     if tls_key.is_empty() {
         println!("Starting HTTP server");
         let app = Router::new()
+            .route("/", get(handle_root))
             .route("/submit", post(receive_submission))
             .route("/status", get(submission_status))
             .with_state(app_state)
             .layer(limit_layer)
             .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024));
-        let tcp_listener = TcpListener::bind((args.host, args.port)).await.unwrap();
+        let tcp_listener = TcpListener::bind((args.host, port)).await.unwrap();
         axum::serve(tcp_listener, app).await.unwrap();
     } else {
         println!(
@@ -248,7 +291,7 @@ async fn main() {
         let tls_config = RustlsConfig::from_pem_file(tls_chain, tls_key)
             .await
             .unwrap();
-        let address = format!("{}:{}", args.host, args.port);
+        let address = format!("{}:{}", args.host, port);
         let addr = address.parse::<std::net::SocketAddr>().unwrap();
         axum_server::bind_rustls(addr, tls_config)
             .serve(app.into_make_service())
