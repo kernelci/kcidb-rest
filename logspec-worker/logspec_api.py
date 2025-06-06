@@ -187,7 +187,13 @@ def process_log(log_file, parser, start_state):
     """
     log = None
     with open(log_file, "rb") as f:
-        log = f.read().decode("utf-8")
+        magic = f.read(2)
+        f.seek(0)
+        if magic == b'\x1f\x8b':
+            with gzip.open(f, "rt", encoding="utf-8") as gz:
+                log = gz.read()
+        else:
+            log = f.read().decode("utf-8")
 
     if not log:
         # If the log is empty, return an empty list
