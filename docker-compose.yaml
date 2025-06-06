@@ -12,6 +12,8 @@ services:
       - ./spool:/app/spool
       - ./certs:/etc/letsencrypt
     restart: unless-stopped
+    networks:
+      - kcidb
 # To disable JWT auth
 #    command: ["/usr/local/bin/kcidb-restd-rs","-j",""]
   ingester:
@@ -26,6 +28,8 @@ services:
       - ./cache:/app/cache
     command: ["python", "/app/ingester.py", "--spool-dir", "/app/spool"]
     restart: unless-stopped
+    networks:
+      - kcidb
   logspec-worker:
     build:
       context: .
@@ -39,6 +43,8 @@ services:
       - ./config:/app/config
     command: ["python", "/app/logspec_worker.py", "--spool-dir", "/app/spool", "--dry-run"]
     restart: unless-stopped
+    networks:
+      - kcidb
   postgres:
     container_name: 'postgres'
     image: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest'
@@ -47,6 +53,8 @@ services:
       - './config:/config'
     restart: on-failure
     profiles: ["google-cloud-sql"]
+    networks:
+      - kcidb
   db:
     image: postgres:17
     container_name: 'postgres'
@@ -58,6 +66,8 @@ services:
       - "5432:5432"
     restart: unless-stopped
     profiles: ["self-hosted"]
+    networks:
+      - kcidb
   dbinit:
     build:
       context: .
@@ -69,6 +79,13 @@ services:
     profiles: ["self-hosted"]
     depends_on:
       - db
+    networks:
+      - kcidb
+networks:
+  kcidb:
+    name: kcidb
+    driver: bridge
+
 # TODO: This is complicated to set up, due dashboard on same server
 #  certbot:
 #    image: certbot/certbot
@@ -87,5 +104,3 @@ services:
 #    # Uncomment the following lines to run certbot in a loop, and comment the above line
 #    #entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 #    #restart: unless-stopped
-    
-    
