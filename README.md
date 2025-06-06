@@ -163,7 +163,7 @@ docker logs postgres
 ### Connecting to the Database
 
 ```bash
-docker exec -it postgres psql -U kcidb -d kcidb
+docker exec -it postgres psql -U kcidb_editor -d kcidb
 ```
 
 ### Authentication
