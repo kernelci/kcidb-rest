@@ -26,13 +26,13 @@ The system consists of several interconnected components:
 
 4. **PostgreSQL Database** - Stores all KCIDB data
    - Can be run locally (self-hosted mode)
-   - Can be connected to Google Cloud SQL
+   - Can be connected to Google Cloud SQL (deprecated soon)
 
 ## Installation
 
 ### Prerequisites
 
-Docker and Docker Compose (the newer `docker compose` plugin, not the legacy `docker-compose`; version 2.0+ required)
+- Docker and Docker Compose (the newer `docker compose` plugin, not the legacy `docker-compose`; version 2.0+ required)
 - Git
 
 ### Clone the Repository
@@ -42,7 +42,22 @@ git clone https://github.com/kernelci/kcidb-rest.git
 cd kcidb-rest
 ```
 
-### Configuration
+### Quick Start (recommended)
+To quickly start the KCIDB-REST services with a local PostgreSQL database, run:
+
+```bash
+./self-hosted.sh run
+```
+This script will:
+- Build and start the Docker containers
+- Initialize the PostgreSQL database
+- Start the REST API, ingester, and logspec-worker services
+
+Also available commands:
+- `./self-hosted.sh down` - Stops the services
+- `./self-hosted.sh clean` - Stops and removes all containers, configs, databases, networks, and volumes
+
+### Manual configuration
 
 Create a `.env` file in the root directory with the following environment variables:
 
@@ -72,6 +87,9 @@ This command:
 - Sets up a local PostgreSQL database
 - Initializes the database schema
 - Starts the REST API, ingester, and logspec-worker services
+
+Note: By default it is expecting PostgreSQL to be running with default settings, except postgres password which is set to `kcidb`.
+It will also create a user `kcidb_editor` with password `kcidb` and a database `kcidb`, and user `kcidb_viewer` with password `kcidb` for read-only access.
 
 #### Google Cloud SQL Mode
 
