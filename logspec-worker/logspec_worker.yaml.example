@@ -13,7 +13,7 @@
 #   - include_path: a list of test paths to include, if not present none
 #     are included. Usually path is TEST_SUITE_NAME.TEST_NAME.SUBTEST_NAME.etc
 
-collabora:
+maestro:
   - type: build
   - type: test
     include_path:
