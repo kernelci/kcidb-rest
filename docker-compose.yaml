@@ -30,6 +30,11 @@ services:
     restart: unless-stopped
     networks:
       - kcidb
+    depends_on:
+      db:
+        condition: service_healthy
+      dbinit:
+        condition: service_completed_successfully
   logspec-worker:
     build:
       context: .
@@ -45,6 +50,11 @@ services:
     restart: unless-stopped
     networks:
       - kcidb
+    depends_on:
+      db:
+        condition: service_healthy
+      dbinit:
+        condition: service_completed_successfully
   postgres:
     container_name: 'postgres'
     image: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest'
@@ -58,6 +68,12 @@ services:
   db:
     image: postgres:17
     container_name: 'postgres'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s        # run every 10 s
+      timeout: 5s          # fail if probe > 5 s
+      retries: 5           # mark unhealthy after 5 failures
+      start_period: 5s     # give Postgres a moment to boot    
     env_file:
       - .env
     volumes:
@@ -78,7 +94,8 @@ services:
     restart: "no"
     profiles: ["self-hosted"]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - kcidb
 networks:

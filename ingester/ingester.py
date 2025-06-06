@@ -21,9 +21,13 @@ import argparse
 from kcidb import io, db, mq, orm, oo, monitor, tests, unittest, misc # noqa
 import json
 import time
+import logging
 
 # default database
 DATABASE = "postgresql:dbname=kcidb user=kcidb password=kcidb host=localhost port=5432"
+VERBOSE = 0
+
+logger = logging.getLogger('ingester')
 
 def get_db_credentials():
     global DATABASE
@@ -65,56 +69,61 @@ def ingest_submissions(spool_dir, db_client=None):
     io_schema = db_client.get_schema()[1]
     # iterate over all files in the directory spool_dir
     for filename in os.listdir(spool_dir):
+        # skip directories
+        if os.path.isdir(os.path.join(spool_dir, filename)):
+            continue
         # skip if not json
         if not filename.endswith(".json"):
-            #print(f"Skipping invalid extension {filename}")
             continue
-        print(f"Ingesting {filename}")
+        logger.info(f"Ingesting {filename}")
         try:
             with open(os.path.join(spool_dir, filename), "r") as f:
                 fsize = os.path.getsize(os.path.join(spool_dir, filename))
                 if fsize == 0:
-                    print(f"File {filename} is empty, skipping, deleting")
+                    if VERBOSE:
+                        logger.info(f"File {filename} is empty, skipping, deleting")
                     os.remove(os.path.join(spool_dir, filename))
                     continue
                 start_time = time.time()
-                print(f"File size: {fsize}")
+                if VERBOSE:
+                    logger.info(f"File size: {fsize}")
                 try:
                     data = json.loads(f.read())
                     data = io_schema.validate(data)
                     data = io_schema.upgrade(data, copy=False)
                     db_client.load(data)
                 except Exception as e:
-                    print(f"Error loading data: {e}")
-                    print(f"File: {filename}")
+                    logger.error(f"Error loading data: {e}")
+                    logger.error(f"File: {filename}")
                     # move the file to the failed directory for later inspection
                     move_file_to_failed_dir(os.path.join(spool_dir, filename), failed_dir)
                     continue
                 ing_speed = fsize / (time.time() - start_time) / 1024
-                print(f"Ingested {filename} in {ing_speed} KB/s")
+                if VERBOSE:
+                    logger.info(f"Ingested {filename} in {ing_speed} KB/s")
                 # Archive the file
                 os.rename(os.path.join(spool_dir, filename), os.path.join(archive_dir, filename))
 
         except Exception as e:
-            print(f"Error: {e}")
-            print(f"File: {filename}")
+            logger.error(f"Error: {e}")
+            logger.error(f"File: {filename}")
             raise e
 
 def verify_dir(dir):
     if not os.path.exists(dir):
-        print(f"Directory {dir} does not exist")
+        logger.error(f"Directory {dir} does not exist")
         # try to create it
         try:
             os.makedirs(dir)
-            print(f"Directory {dir} created")
+            logger.info(f"Directory {dir} created")
         except Exception as e:
-            print(f"Error creating directory {dir}: {e}")
+            logger.error(f"Error creating directory {dir}: {e}")
             raise e
     if not os.path.isdir(dir):
         raise Exception(f"Directory {dir} is not a directory")
     if not os.access(dir, os.W_OK):
         raise Exception(f"Directory {dir} is not writable")
-    print(f"Directory {dir} is valid and writable")
+    logger.info(f"Directory {dir} is valid and writable")
 
 def verify_spool_dirs(spool_dir):
     failed_dir = os.path.join(spool_dir, "failed")
@@ -125,14 +134,21 @@ def verify_spool_dirs(spool_dir):
 
 
 def main():
+    global VERBOSE
+    # read from environment variable KCIDB_VERBOSE
+    VERBOSE = int(os.environ.get("KCIDB_VERBOSE", 0))
+    if VERBOSE:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
     parser = argparse.ArgumentParser()
     parser.add_argument("--spool-dir", type=str, required=True)
+    parser.add_argument("--verbose", type=int, default=VERBOSE)
     args = parser.parse_args()
-    print("Starting ingestion process...")
+    logger.info("Starting ingestion process...")
     verify_spool_dirs(args.spool_dir)
     get_db_credentials()
     db_client = get_db_client(DATABASE)
-    print(f"Database: {DATABASE}")
     while True:
         ingest_submissions(args.spool_dir, db_client)
         time.sleep(1)

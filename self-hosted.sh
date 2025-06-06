@@ -54,6 +54,10 @@ if [ "$1" == "run" ]; then
 POSTGRES_PASSWORD=kcidb
 PS_PASS=kcidb
 PG_URI=postgresql:dbname=kcidb user=kcidb_editor password=kcidb host=db port=5432
+# Programs will be more talkative if this is set, in production might want to set to 0
+KCIDB_VERBOSE=1
+# logspec will not modify anything in database if this is set
+KCIDB_DRY_RUN=1
 # JWT authentication
 JWT_SECRET=${RND_JWT_SECRET}" > .env
     echo "New .env file created with default values."
