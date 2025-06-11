@@ -156,33 +156,11 @@ fn are_we_root() -> bool {
 }
 
 async fn handle_root() -> impl IntoResponse {
-    let html = r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KCIDB Submission Server</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #f8f9fa; color: #222; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 60px auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 32px; }
-        h1 { color: #0057b7; }
-        a { color: #0057b7; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .logo { width: 120px; margin-bottom: 24px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <img src="https://kernelci.org/wp-content/uploads/sites/92/2019/10/kernelci-horizontal-color.svg" alt="KernelCI Logo" class="logo"/>
-        <h1>KCIDB Submission Server</h1>
-        <p>Welcome! This is the <b>KCIDB</b> (KernelCI Database) REST submission endpoint.</p>
-        <p>For more information about KernelCI and KCIDB, please visit <a href="https://kernelci.org/" target="_blank">kernelci.org</a>.</p>
-        <p>If you are looking to submit test results or interact with KCIDB, please refer to the <a href="https://docs.kernelci.org/kcidb/" target="_blank">KCIDB documentation</a>.</p>
-        <hr/>
-        <p style="font-size: 0.95em; color: #888;">&copy; 2025 KernelCI Project</p>
-    </div>
-</body>
-</html>"#;
+    let index_path = Path::new("/usr/local/share/kcidb-restd-rs/index.html");
+    let html = tokio::fs::read_to_string(index_path).await.unwrap_or_else(|_| {
+        // Fallback HTML if the file is not found
+        "<html><body><h1>Welcome to KCIDB REST API</h1></body></html>".to_string()
+    });
     (
         StatusCode::OK,
         axum::response::Html(html)
@@ -281,6 +259,7 @@ async fn main() {
             tls_key, tls_chain
         );
         let app = Router::new()
+            .route("/", get(handle_root))
             .route("/submit", post(receive_submission))
             .route("/status", get(submission_status))
             .route("/metrics", get(submission_metrics))
