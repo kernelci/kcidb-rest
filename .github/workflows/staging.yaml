@@ -48,4 +48,4 @@ jobs:
           git rebase origin/staging.kernelci.org
           git stash pop
           docker compose pull
-          docker compose up -d --remove-orphans
+          docker compose --profile self-hosted up -d --remove-orphans
