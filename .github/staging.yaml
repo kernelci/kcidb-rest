@@ -1,0 +1,47 @@
+name: Deploy production
+on:
+  push:
+    branches: [main]
+
+jobs:
+  prepare-staging-branches:
+      runs-on: ubuntu-22.04
+      environment: deploydocker
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+            with:
+                repository: 'kernelci/kernelci-deploy'
+                ref: 'main'
+                fetch-depth: 0
+                path: kernelci-deploy
+          - name: Prepare necessary tools
+            run: |
+                export DEBIAN_FRONTEND=noninteractive
+                sudo apt-get update
+                sudo apt-get install -y python3-pip git
+                pip3 install --upgrade pip
+                git config --global user.email "kernelci@kernelci.org"
+                git config --global user.name "Staging script"
+          - name: Prepare staging branches
+            run: |
+                cd kernelci-deploy/tools
+                ./kci-pending.py --push ${{ secrets.GHPAT}} kcidb-ng --token ${{ secrets.GITHUB_TOKEN }}
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Deploy over SSH
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.DB_SSH_HOST }}
+        username: ${{ secrets.DB_SSH_USER }}
+        key: ${{ secrets.DB_SSH_KEY }}
+        script: |
+          set -e
+          cd /srv/kcidb-ng
+          git fetch origin
+          git rebase origin/staging.kernelci.org
+          docker compose pull
+          docker compose up -d --remove-orphans

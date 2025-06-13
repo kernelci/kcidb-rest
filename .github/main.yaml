@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy production
 on:
   push:
     branches: [main]
@@ -16,7 +16,7 @@ jobs:
         username: ${{ secrets.DB_SSH_USER }}
         key: ${{ secrets.DB_SSH_KEY }}
         script: |
-          cd kcidb-rest
+          cd kcidb-ng
           git pull --ff-only
           docker compose pull
           docker compose up -d --remove-orphans
