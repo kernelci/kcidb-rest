@@ -43,7 +43,9 @@ jobs:
         script: |
           set -e
           cd /srv/kcidb-ng
+          git stash
           git fetch origin
           git rebase origin/staging.kernelci.org
+          git stash pop
           docker compose pull
           docker compose up -d --remove-orphans
