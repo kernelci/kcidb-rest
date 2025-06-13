@@ -28,7 +28,7 @@ fi
 # So you can install everything from scratch
 if [ "$1" == "clean" ]; then
   # Ask user for confirmation
-  read -p "Are you sure you want to remove all kcidb-rest Docker containers, volumes, and networks? This will delete all data. (y/N): " confirm
+  read -p "Are you sure you want to remove all kcidb-ng Docker containers, volumes, and networks? This will delete all data. (y/N): " confirm
   if [[ ! $confirm =~ ^[yY]$ ]]; then
     echo "Operation cancelled."
     exit 0
